@@ -394,11 +394,12 @@ function setGroupProfitMode(mode) {
 /* ============ BUY FUND ============ */
 let buyTargetCode = null;
 
-function buyFund(code) {
+async function buyFund(code) {
   buyTargetCode = code;
   const f = funds.find(x => x.code === code);
   if (!f) return;
-  const d = computedData ? computedData.fetched[code] : null;
+  const d = await fetchOne(code);
+  if (computedData && d) computedData.fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
   document.getElementById('buyModalTitle').textContent = '买进 ' + f.name;
   document.getElementById('buyFundInfo').textContent = '当前：自选观察中 | 代码：' + f.code + (d ? ' | 实时估值：¥' + d.gsz : '');
   document.getElementById('buyCost').value = '';
@@ -440,9 +441,10 @@ async function confirmBuy() {
   if (!groupId) { showToast('请选择目标分组', true); return; }
   if (isNaN(cost) || cost <= 0) { showToast('请输入买入金额', true); return; }
   if (isNaN(price) || price <= 0) {
-    const d = computedData ? computedData.fetched[buyTargetCode] : null;
+    const d = await fetchOne(buyTargetCode);
     if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
-    price = parseFloat(d.gsz);
+    price = d.gsz;
+    if (computedData) computedData.fetched[buyTargetCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
   }
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -471,11 +473,12 @@ function refreshOne(code) {
   });
 }
 let addPosCode = null;
-function addPosition(code) {
+async function addPosition(code) {
   addPosCode = code;
   const f = funds.find(x => x.code === code);
   if (!f) return;
-  const d = computedData ? computedData.fetched[code] : null;
+  const d = await fetchOne(code);
+  if (computedData && d) computedData.fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
   const curPrice = d ? d.gsz : '—';
   document.getElementById('addPosTitle').textContent = '加仓 ' + f.name;
   const posInfo = f.shares > 0 ? `单价 ¥${f.cost}，${f.shares}份，总投入 ¥${(f.cost*f.shares).toFixed(2)}` : '暂无持仓';
@@ -512,9 +515,10 @@ async function confirmAddPosition() {
   let addPrice = parseFloat(document.getElementById('addPosPrice').value);
   if (isNaN(addAmount) || addAmount <= 0) { showToast('请输入加仓金额', true); return; }
   if (isNaN(addPrice) || addPrice <= 0) {
-    const d = computedData ? computedData.fetched[addPosCode] : null;
+    const d = await fetchOne(addPosCode);
     if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
-    addPrice = parseFloat(d.gsz);
+    addPrice = d.gsz;
+    if (computedData) computedData.fetched[addPosCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
   }
   const now = new Date();
   const isAfterMarket = now.getHours() >= 15;
