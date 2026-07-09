@@ -75,6 +75,28 @@ def fetch_one(code):
         return None
 
 
+def fetch_official_nav(code):
+    try:
+        r = requests.get(
+            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=1',
+            headers={'Referer': 'https://fund.eastmoney.com/'},
+            timeout=FETCH_TIMEOUT,
+        )
+        text = r.text.strip()
+        m = re.match(r'^jquery\((.*)\);?\s*$', text, re.IGNORECASE)
+        if m:
+            text = m.group(1)
+        data = json.loads(text)
+        if data.get('Data') and data['Data'].get('LSJZList'):
+            nav = data['Data']['LSJZList'][0]
+            dwjz = float(nav['DWJZ'])
+            if dwjz > 0:
+                return dwjz
+    except Exception:
+        pass
+    return None
+
+
 # ── 计算层 ──
 
 def calc_periods(records):
@@ -319,6 +341,21 @@ def api_refresh():
                 live[code] = fut.result()
             except Exception:
                 live[code] = None
+
+    # 非交易时段（盘后或盘前）用官方净值替代 gsz
+    now = datetime.now()
+    if now.hour >= 15 or now.hour < 9:
+        codes_to_fix = [f['code'] for f in funds if live.get(f['code'])]
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            nav_future = {pool.submit(fetch_official_nav, code): code for code in set(codes_to_fix)}
+            for fut in as_completed(nav_future):
+                code = nav_future[fut]
+                try:
+                    nav = fut.result()
+                    if nav and nav > 0 and live.get(code):
+                        live[code]['gsz'] = nav
+                except Exception:
+                    pass
 
     # 修正 todayBuy: 用最新 gsz 重算份额
     changed = False
