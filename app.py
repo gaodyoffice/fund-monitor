@@ -30,6 +30,13 @@ FETCH_TIMEOUT = 15
 
 def read_config():
     if not os.path.exists(DATA_FILE):
+        example = os.path.join(os.path.dirname(__file__), 'funds.example.json')
+        if os.path.exists(example):
+            try:
+                with open(example, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                pass
         return {"groups": [], "funds": []}
     try:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
