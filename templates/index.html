@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0d1117">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="manifest" href="manifest.json">
+
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <title>基金实时看板</title>
 <style>
@@ -77,6 +77,8 @@ table{width:100%;border-collapse:collapse;font-size:.76rem}
 th{color:var(--text2);font-size:.7rem;padding:5px 4px;text-align:right;border-bottom:1px solid var(--card-border);white-space:nowrap;position:relative;user-select:none}
 @media(max-width:600px){th{font-size:.6rem;padding:4px 2px}}
 th:first-child{text-align:left;min-width:80px}
+th.sortable{cursor:pointer}
+th .sort-ind{margin-left:3px;font-size:.6rem;opacity:.5}
 .resize-handle{position:absolute;right:-2px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
 .resize-handle:hover,.resize-handle.active{background:var(--accent-bg3)}
 td{padding:4px 4px;border-bottom:1px solid var(--card-border);vertical-align:middle;white-space:nowrap}
@@ -114,8 +116,9 @@ tr:hover td{background:var(--hover)}
 .pie-legend{flex:1;min-width:140px}
 .leg-item{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.74rem}
 .leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.leg-name{color:var(--text);width:50px;overflow:hidden;text-overflow:ellipsis}
-.leg-pct{color:var(--text2);width:36px;text-align:right}
+.leg-name{color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.leg-amount{color:var(--text2);width:60px;text-align:right;flex-shrink:0}
+.leg-pct{color:var(--muted);width:36px;text-align:right;flex-shrink:0}
 
 /* Empty state */
 .empty{padding:24px;text-align:center;color:var(--muted);font-size:.82rem}
@@ -169,6 +172,10 @@ tr:hover td{background:var(--hover)}
       <option value="light">☀️ 白色</option>
       <option value="silver">🌑 深灰</option>
     </select>
+    <select id="groupProfitMode" class="theme-select" onchange="setGroupProfitMode(this.value)">
+      <option value="total">分组:浮动盈亏</option>
+      <option value="today">分组:今日盈亏</option>
+    </select>
   </div>
 </div>
 
@@ -211,23 +218,23 @@ tr:hover td{background:var(--hover)}
     </div>
   </div>
   <div class="table-wrap"><table id="fundTable"><thead><tr>
-    <th data-col="0">代码 / 名称</th>
-    <th data-col="1">总投入</th>
-    <th data-col="16">持仓单价</th>
-    <th data-col="2">份额</th>
-    <th data-col="3">昨日净值</th>
-    <th data-col="4">实时估值</th>
-    <th data-col="5">涨跌幅</th>
-    <th data-col="6">周涨幅</th>
-    <th data-col="7">2周涨幅</th>
-    <th data-col="8">月涨幅</th>
-    <th data-col="9">3月涨幅</th>
-    <th data-col="10">年涨幅</th>
-    <th data-col="11">累计涨幅</th>
-    <th data-col="12">浮动盈亏</th>
-    <th data-col="17">持仓收益</th>
-    <th data-col="13">今日盈亏</th>
-    <th data-col="14">估算市值</th>
+    <th data-col="0" class="sortable">代码 / 名称</th>
+    <th data-col="1" class="sortable">总投入</th>
+    <th data-col="16" class="sortable">持仓单价</th>
+    <th data-col="2" class="sortable">份额</th>
+    <th data-col="3" class="sortable">昨日净值</th>
+    <th data-col="4" class="sortable">实时估值</th>
+    <th data-col="5" class="sortable">涨跌幅</th>
+    <th data-col="6" class="sortable">周涨幅</th>
+    <th data-col="7" class="sortable">2周涨幅</th>
+    <th data-col="8" class="sortable">月涨幅</th>
+    <th data-col="9" class="sortable">3月涨幅</th>
+    <th data-col="10" class="sortable">年涨幅</th>
+    <th data-col="11" class="sortable">累计涨幅</th>
+    <th data-col="12" class="sortable">浮动盈亏</th>
+    <th data-col="17" class="sortable">持仓收益</th>
+    <th data-col="13" class="sortable">今日盈亏</th>
+    <th data-col="14" class="sortable">估算市值</th>
     <th data-col="15"></th>
   </tr></thead><tbody id="fundTbody"></tbody></table></div>
   <div id="tableEmpty" class="empty">暂无基金，点击「＋ 添加基金」开始</div>
@@ -376,6 +383,15 @@ function switchTheme(t) {
   localStorage.setItem('fm_theme', t);
 }
 
+/* ============ GROUP PROFIT MODE ============ */
+function getGroupProfitMode() {
+  return localStorage.getItem('fm_group_profit_mode') || 'total';
+}
+function setGroupProfitMode(mode) {
+  localStorage.setItem('fm_group_profit_mode', mode);
+  renderGroupTabs();
+}
+
 /* ============ BUY FUND ============ */
 let buyTargetCode = null;
 
@@ -499,19 +515,25 @@ function confirmDelete() {
 
 /* ============ GROUP CRUD ============ */
 function getGroupProfit(gid) {
-  let profit = 0, cost = 0, hasLive = false;
+  let profit = 0, cost = 0, hasLive = false, todayProfit = 0;
+  const todayStr = new Date().toISOString().split('T')[0];
   funds.forEach(f => {
     if (f.groupId !== gid || !f.shares || f.shares <= 0) return;
     const d = fetched[f.code];
     if (!d) return;
     hasLive = true;
     const gsz = parseFloat(d.gsz) || 0;
+    const dwjz = parseFloat(d.dwjz) || 0;
     const totalPaid = f.shares * f.cost;
     const curVal = f.shares * gsz;
     profit += curVal - totalPaid;
     cost += totalPaid;
+    if (dwjz > 0) {
+      const base = f.addTime === todayStr ? f.cost : dwjz;
+      todayProfit += f.shares * (gsz - base);
+    }
   });
-  return { profit, cost, hasLive };
+  return { profit, cost, hasLive, todayProfit };
 }
 
 function renderGroupTabs() {
@@ -529,8 +551,10 @@ function renderGroupTabs() {
     if (g.id === 'watchlist') return;
     const active = curGroup === g.id ? 'active' : '';
     const gp = getGroupProfit(g.id);
-    const pStr = gp.hasLive ? ((gp.profit>0?'+':'') + '¥' + Math.round(gp.profit).toLocaleString()) : '';
-    const pClr = gp.profit >= 0 ? '#ff4d4f' : '#3fb950';
+    const mode = getGroupProfitMode();
+    const dp = mode === 'today' ? gp.todayProfit : gp.profit;
+    const pStr = gp.hasLive ? ((dp>0?'+':'') + '¥' + Math.round(dp).toLocaleString()) : '';
+    const pClr = dp >= 0 ? '#ff4d4f' : '#3fb950';
     html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
       <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle;flex-shrink:0"></span>
       <span>${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
@@ -948,12 +972,68 @@ async function fetchAll() {
 /* ============ RENDER ============ */
 let maxAbsPct = 10; // default
 
+/* ============ SORT ============ */
+let sortCol = null, sortDir = null;
+function getSortKey(r, col) {
+  if (col === 0) return r.code;
+  if (col === 5 || col === 6 || col === 7 || col === 8 || col === 9 || col === 10 || col === 11) {
+    const v = col === 5 ? r.pct : r.periods[{6:'w1',7:'w2',8:'m1',9:'m3',10:'y1',11:'sinceAdd'}[col]];
+    return v !== null && v !== undefined && isFinite(v) ? v : -Infinity;
+  }
+  const map = {1:'totalPaid',2:'shares',3:'dwjz',4:'gsz',12:'profit',13:'todayProfit',14:'curVal',16:'cost',17:'profitRate'};
+  const key = map[col];
+  if (col === 17) return r.totalPaid > 0 ? r.profit / r.totalPaid * 100 : -Infinity;
+  return key ? (r[key] !== undefined && r[key] !== null ? r[key] : -Infinity) : 0;
+}
+function initSort() {
+  document.querySelectorAll('#fundTable th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = parseInt(th.dataset.col);
+      if (sortCol === col) {
+        if (sortDir === 'desc') sortDir = 'asc';
+        else if (sortDir === 'asc') { sortDir = null; sortCol = null; }
+        else sortDir = 'desc';
+      } else {
+        sortCol = col;
+        sortDir = 'desc';
+      }
+      render();
+    });
+  });
+}
+function updateSortIndicators() {
+  document.querySelectorAll('#fundTable th .sort-ind').forEach(el => el.remove());
+  if (sortCol === null || sortDir === null) return;
+  const th = document.querySelector(`#fundTable th[data-col="${sortCol}"]`);
+  if (th) {
+    const span = document.createElement('span');
+    span.className = 'sort-ind';
+    span.textContent = sortDir === 'asc' ? '▲' : '▼';
+    th.appendChild(span);
+  }
+}
+function sortRows(arr) {
+  if (sortCol === null || sortDir === null) return;
+  arr.sort((a, b) => {
+    const va = getSortKey(a, sortCol), vb = getSortKey(b, sortCol);
+    if (va === -Infinity && vb === -Infinity) return 0;
+    if (va === -Infinity) return 1;
+    if (vb === -Infinity) return -1;
+    if (sortCol === 0) {
+      const cmp = String(va).localeCompare(String(vb));
+      return sortDir === 'asc' ? cmp : -cmp;
+    }
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+}
+
 function render() {
   const filtered = getFilteredFunds();
   const hasLive = Object.keys(fetched).length > 0 && filtered.length > 0;
 
   const now = new Date();
-  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const ts = `${todayStr} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
   document.getElementById('updateTime').textContent = `更新于 ${ts}`;
 
   document.getElementById('summaryCard').style.display = filtered.length > 0 ? '' : 'none';
@@ -989,7 +1069,8 @@ function render() {
       totalPaid = f.shares * f.cost;
       curVal = f.shares * gsz;
       profit = curVal - totalPaid;
-      todayProfit = dwjz > 0 ? f.shares * (gsz - dwjz) : 0;
+      const base = f.addTime === todayStr ? f.cost : dwjz;
+      todayProfit = base > 0 ? f.shares * (gsz - base) : 0;
     }
     rows.push({ ...f, gsz, dwjz, pct, hasData, hasPos, totalPaid, curVal, profit, todayProfit, periods });
   });
@@ -1046,6 +1127,10 @@ function render() {
   } else {
     bpEl.style.display = 'none';
   }
+
+  // Apply sort
+  sortRows(rows);
+  updateSortIndicators();
 
   // Table rows
   const fmt = v => v.toFixed(2);
@@ -1148,7 +1233,8 @@ function renderPieChart(rows) {
     const large = angle > 180 ? 1 : 0;
     const color = row.color || colors[i % colors.length];
     paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z" fill="${color}" opacity=".85"/>`;
-    legs += `<div class="leg-item"><span class="leg-dot" style="background:${color}"></span><span class="leg-name">${row.code}</span><span class="leg-pct">${pct.toFixed(1)}%</span></div>`;
+    const amt = '¥' + Math.round(row.totalPaid).toLocaleString();
+    legs += `<div class="leg-item"><span class="leg-dot" style="background:${color}"></span><span class="leg-name" title="${row.code} ${row.name}">${row.code} ${row.name}</span><span class="leg-amount">${amt}</span><span class="leg-pct">${pct.toFixed(1)}%</span></div>`;
     startAngle = endAngle;
   });
 
@@ -1343,6 +1429,7 @@ document.querySelectorAll('script[id^="jsonp_script_"]').forEach(s => s.remove()
 (async function init() {
   const savedTheme = localStorage.getItem('fm_theme') || 'dark';
   switchTheme(savedTheme);
+  document.getElementById('groupProfitMode').value = getGroupProfitMode();
   // load config from server API
   try {
     const res = await fetch('/api/config');
@@ -1375,6 +1462,7 @@ document.querySelectorAll('script[id^="jsonp_script_"]').forEach(s => s.remove()
   render();
   initColumnResize();
   initColVisibility();
+  initSort();
   if (funds.length > 0) {
     fetchAllFunds();
   }
