@@ -41,7 +41,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
 /* Group Tabs */
 .grp-tabs{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;scrollbar-width:none;position:sticky;top:56px;background:var(--bg);z-index:9;border-bottom:1px solid var(--border2)}
 .grp-tabs::-webkit-scrollbar{display:none}
-.grp-tab{padding:5px 14px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:.78rem;font-family:inherit;white-space:nowrap;transition:all .2s;flex-shrink:0}
+.grp-tab{padding:5px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:.78rem;font-family:inherit;transition:all .2s;flex-shrink:0;display:inline-flex;align-items:center;gap:3px}
 .grp-tab:hover{border-color:var(--accent);color:var(--accent)}
 .grp-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .grp-tab-add{background:transparent;border:1px dashed var(--border);color:var(--muted);padding:5px 10px}
@@ -531,8 +531,8 @@ function renderGroupTabs() {
     const pStr = gp.profit !== 0 ? ((gp.profit>0?'+':'') + '¥' + Math.round(gp.profit).toLocaleString()) : '';
     const pClr = gp.profit > 0 ? '#ff4d4f' : (gp.profit < 0 ? '#3fb950' : '');
     html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
-      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle"></span>
-      ${g.name}${pStr ? ` <span style="color:${pClr};font-size:.68rem">${pStr}</span>` : ''}
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle;flex-shrink:0"></span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;display:inline-block;vertical-align:middle">${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
       <span class="grp-edit-btn" onclick="event.stopPropagation();showEditGroup('${g.id}')" title="编辑分组">✎</span>
       <span class="del" onclick="event.stopPropagation();deleteGroup('${g.id}')" title="删除分组">×</span>
     </button>`;
