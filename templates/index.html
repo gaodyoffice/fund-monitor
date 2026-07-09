@@ -211,9 +211,9 @@ tr:hover td{background:var(--hover)}
       <label><input type="checkbox" checked data-col="9"> 3月涨幅</label>
       <label><input type="checkbox" checked data-col="10"> 年涨幅</label>
       <label><input type="checkbox" checked data-col="11"> 累计涨幅</label>
-      <label><input type="checkbox" checked data-col="12"> 浮动盈亏</label>
-      <label><input type="checkbox" checked data-col="17"> 持仓收益</label>
       <label><input type="checkbox" checked data-col="13"> 今日盈亏</label>
+      <label><input type="checkbox" checked data-col="12"> 浮动盈亏</label>
+      <label><input type="checkbox" checked data-col="17"> 持仓收益率</label>
       <label><input type="checkbox" checked data-col="14"> 估算市值</label>
     </div>
   </div>
@@ -231,9 +231,9 @@ tr:hover td{background:var(--hover)}
     <th data-col="9" class="sortable">3月涨幅</th>
     <th data-col="10" class="sortable">年涨幅</th>
     <th data-col="11" class="sortable">累计涨幅</th>
-    <th data-col="12" class="sortable">浮动盈亏</th>
-    <th data-col="17" class="sortable">持仓收益</th>
     <th data-col="13" class="sortable">今日盈亏</th>
+    <th data-col="12" class="sortable">浮动盈亏</th>
+    <th data-col="17" class="sortable">持仓收益率</th>
     <th data-col="14" class="sortable">估算市值</th>
     <th data-col="15"></th>
   </tr></thead><tbody id="fundTbody"></tbody></table></div>
@@ -370,14 +370,11 @@ function syncServer() {
 
 let groups = loadGroups();
 let funds = loadFunds();
-let curGroup = 'all'; // 'all' or group id
-let fetched = {};     // {code: {gsz, dwjz, name, gztime}}
-let periodsCache = {}; // {code: {w1, w2, m1, m3, y1, sinceAdd}}
-let summaryData = null; // {total_cost, total_value, total_profit, total_today, total_pct}
-let groupsProfit = {}; // {groupId: profit}
+let curGroup = 'all';
+let computedData = null; // {rows, summary, groupsProfit, groupBreakdown, fetched, funds, groups}
 let refreshInterval = 300;
 let lastGroupId = localStorage.getItem('fm_last_group') || '';
-let editingFundCode = null; // for edit mode
+let editingFundCode = null;
 
 /* ============ THEME ============ */
 function switchTheme(t) {
@@ -391,7 +388,7 @@ function getGroupProfitMode() {
 }
 function setGroupProfitMode(mode) {
   localStorage.setItem('fm_group_profit_mode', mode);
-  renderGroupTabs();
+  render();
 }
 
 /* ============ BUY FUND ============ */
@@ -401,7 +398,7 @@ function buyFund(code) {
   buyTargetCode = code;
   const f = funds.find(x => x.code === code);
   if (!f) return;
-  const d = fetched[code];
+  const d = computedData ? computedData.fetched[code] : null;
   document.getElementById('buyModalTitle').textContent = '买进 ' + f.name;
   document.getElementById('buyFundInfo').textContent = '当前：自选观察中 | 代码：' + f.code + (d ? ' | 实时估值：¥' + d.gsz : '');
   document.getElementById('buyCost').value = '';
@@ -434,7 +431,7 @@ function buyFund(code) {
   showModal('buyModal');
 }
 
-function confirmBuy() {
+async function confirmBuy() {
   const f = funds.find(x => x.code === buyTargetCode);
   if (!f) return;
   const groupId = document.getElementById('buyGroupSelect').value;
@@ -443,7 +440,7 @@ function confirmBuy() {
   if (!groupId) { showToast('请选择目标分组', true); return; }
   if (isNaN(cost) || cost <= 0) { showToast('请输入买入金额', true); return; }
   if (isNaN(price) || price <= 0) {
-    const d = fetched[buyTargetCode];
+    const d = computedData ? computedData.fetched[buyTargetCode] : null;
     if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
     price = parseFloat(d.gsz);
   }
@@ -460,18 +457,15 @@ function confirmBuy() {
     f.todayBuy = (f.todayBuy || 0) + cost;
   }
   if (!f.addTime) f.addTime = todayStr;
-  (async () => {
-    await saveFunds(funds);
-    closeModal('buyModal');
-    if (fetched[f.code]) { await refreshOne(f.code); }
-    render();
-    showToast(isAfterMarket ? `${f.name} ¥${cost.toFixed(2)} 已按收盘价买入` : `${f.name} ¥${cost.toFixed(2)} 盘中临时记录，刷新后修正`);
-  })();
+  await saveFunds(funds);
+  closeModal('buyModal');
+  await computeAndRender();
+  showToast(isAfterMarket ? `${f.name} ¥${cost.toFixed(2)} 已按收盘价买入` : `${f.name} ¥${cost.toFixed(2)} 盘中临时记录，刷新后修正`);
 }
 function refreshOne(code) {
   return fetchOne(code).then(d => {
-    if (d) {
-      fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+    if (d && computedData) {
+      computedData.fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
     }
     return d;
   });
@@ -481,7 +475,7 @@ function addPosition(code) {
   addPosCode = code;
   const f = funds.find(x => x.code === code);
   if (!f) return;
-  const d = fetched[code];
+  const d = computedData ? computedData.fetched[code] : null;
   const curPrice = d ? d.gsz : '—';
   document.getElementById('addPosTitle').textContent = '加仓 ' + f.name;
   const posInfo = f.shares > 0 ? `单价 ¥${f.cost}，${f.shares}份，总投入 ¥${(f.cost*f.shares).toFixed(2)}` : '暂无持仓';
@@ -511,14 +505,14 @@ function addPosition(code) {
   showModal('addPosModal');
 }
 
-function confirmAddPosition() {
+async function confirmAddPosition() {
   const f = funds.find(x => x.code === addPosCode);
   if (!f) return;
   const addAmount = parseFloat(document.getElementById('addPosAmount').value);
   let addPrice = parseFloat(document.getElementById('addPosPrice').value);
   if (isNaN(addAmount) || addAmount <= 0) { showToast('请输入加仓金额', true); return; }
   if (isNaN(addPrice) || addPrice <= 0) {
-    const d = fetched[addPosCode];
+    const d = computedData ? computedData.fetched[addPosCode] : null;
     if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
     addPrice = parseFloat(d.gsz);
   }
@@ -529,13 +523,10 @@ function confirmAddPosition() {
   f.shares = (f.shares || 0) + addShares;
   f.cost = (oldTotal + addAmount) / f.shares;
   if (!isAfterMarket) f.todayBuy = (f.todayBuy || 0) + addAmount;
-  (async () => {
-    await saveFunds(funds);
-    closeModal('addPosModal');
-    await refreshOne(addPosCode);
-    render();
-    showToast(isAfterMarket ? `加仓 ¥${addAmount.toFixed(2)} 已按收盘价计算` : `加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
-  })();
+  await saveFunds(funds);
+  closeModal('addPosModal');
+  await computeAndRender();
+  showToast(isAfterMarket ? `加仓 ¥${addAmount.toFixed(2)} 已按收盘价计算` : `加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
 }
 
 /* ============ TOAST / LOADING ============ */
@@ -567,34 +558,12 @@ function showConfirm(msg, cb) {
   confirmCb = cb;
   showModal('confirmModal');
 }
-function confirmDelete() {
+async function confirmDelete() {
   closeModal('confirmModal');
-  if (confirmCb) { confirmCb(); confirmCb = null; }
+  if (confirmCb) { await confirmCb(); confirmCb = null; }
 }
 
-/* ============ GROUP CRUD ============ */
-function getGroupProfit(gid) {
-  let profit = 0, cost = 0, hasLive = false, todayProfit = 0;
-  const todayStr = new Date().toISOString().split('T')[0];
-  funds.forEach(f => {
-    if (f.groupId !== gid || !f.shares || f.shares <= 0) return;
-    const d = fetched[f.code];
-    if (!d) return;
-    hasLive = true;
-    const gsz = parseFloat(d.gsz) || 0;
-    const dwjz = parseFloat(d.dwjz) || 0;
-    const totalPaid = f.shares * f.cost;
-    const curVal = f.shares * gsz;
-    profit += curVal - totalPaid;
-    cost += totalPaid;
-    if (dwjz > 0) {
-      const base = f.addTime === todayStr ? f.cost : dwjz;
-      todayProfit += f.shares * (gsz - base);
-    }
-  });
-  return { profit, cost, hasLive, todayProfit };
-}
-
+/* ============ GROUP RENDERING ============ */
 function renderGroupTabs() {
   const el = document.getElementById('groupTabs');
   const wlGroup = groups.find(g => g.id === 'watchlist');
@@ -606,15 +575,18 @@ function renderGroupTabs() {
       自选
     </button>`;
   }
+  const cp = computedData;
   groups.forEach(g => {
     if (g.id === 'watchlist') return;
     const active = curGroup === g.id ? 'active' : '';
-    const gp = getGroupProfit(g.id);
+    const gp = cp ? cp.groupsProfit[g.id] : null;
     const mode = getGroupProfitMode();
-    const dp = mode === 'today' ? gp.todayProfit : gp.profit;
-    const pStr = gp.hasLive ? ((dp>0?'+':'') + '¥' + Math.round(dp).toLocaleString()) : '';
+    const dp = gp ? (mode === 'today' ? gp.todayProfit : gp.profit) : 0;
+    const pStr = gp && gp.hasLive ? ((dp>0?'+':'') + '¥' + Math.round(dp).toLocaleString()) : '';
     const pClr = dp >= 0 ? '#ff4d4f' : '#3fb950';
-    html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
+    const tp = gp && gp.hasLive ? gp.todayProfit : null;
+    const dotColor = tp > 0 ? 'var(--red)' : (tp < 0 ? 'var(--green)' : g.color);
+    html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${dotColor}">
       <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle;flex-shrink:0"></span>
       <span>${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
       <span class="grp-edit-btn" onclick="event.stopPropagation();showEditGroup('${g.id}')" title="编辑分组">✎</span>
@@ -662,10 +634,9 @@ document.getElementById('groupTabs').addEventListener('drop', e => {
   render();
 });
 
-function switchGroup(id) {
+async function switchGroup(id) {
   curGroup = id;
-  renderGroupTabs();
-  render();
+  await computeAndRender();
 }
 
 function showAddGroup() {
@@ -687,7 +658,7 @@ function showEditGroup(id) {
   showModal('groupModal');
 }
 
-function saveGroup() {
+async function saveGroup() {
   const name = document.getElementById('groupName').value.trim();
   const color = document.getElementById('groupColor').value;
   const editId = document.getElementById('groupOkBtn').dataset.editId;
@@ -704,8 +675,7 @@ function saveGroup() {
   lastGroupId = ''; // reset after group edit
   localStorage.setItem('fm_last_group', '');
   closeModal('groupModal');
-  renderGroupTabs();
-  render();
+  await computeAndRender();
   showToast(editId ? '分组已更新' : '分组已创建');
 }
 
@@ -715,42 +685,18 @@ function deleteGroup(id) {
   if (!g) return;
   const count = funds.filter(f => f.groupId === id).length;
   const msg = count > 0 ? `删除分组「${g.name}」？该分组下 ${count} 只基金也将一并删除。` : `删除分组「${g.name}」？`;
-  showConfirm(msg, () => {
+  showConfirm(msg, async () => {
     funds = funds.filter(f => f.groupId !== id);
     saveFunds(funds);
     groups = groups.filter(x => x.id !== id);
     saveGroups(groups);
     if (curGroup === id) curGroup = 'all';
-    renderGroupTabs();
-    render();
+    await computeAndRender();
     showToast(`分组已删除${count > 0 ? `，${count} 只基金已同步删除` : ''}`);
   });
 }
 
 /* ============ FUND CRUD ============ */
-function getFilteredFunds() {
-  if (curGroup === 'all') {
-    // 全部：只显示有持仓，同代码跨组合并
-    const map = {};
-    funds.forEach(f => {
-      if (!f.shares || f.shares <= 0) return;
-      if (map[f.code]) {
-        const m = map[f.code];
-        const oldTotal = (m.cost || 0) * (m.shares || 0);
-        const addTotal = (f.cost || 0) * (f.shares || 0);
-        m.shares = (m.shares || 0) + (f.shares || 0);
-        m.cost = m.shares > 0 ? (oldTotal + addTotal) / m.shares : 0;
-        m.todayBuy = (m.todayBuy || 0) + (f.todayBuy || 0);
-        if (f.addTime && f.addTime < (m.addTime || '')) m.addTime = f.addTime;
-      } else {
-        map[f.code] = { ...f };
-      }
-    });
-    return Object.values(map);
-  }
-  return funds.filter(f => f.groupId === curGroup);
-}
-
 function showAddFund(groupId) {
   editingFundCode = null;
   document.getElementById('fundModalTitle').textContent = '添加基金';
@@ -823,7 +769,7 @@ function saveFund() {
       if (finalTodayBuy > 0) {
         f.todayBuy = (f.todayBuy || 0) + finalTodayBuy;
         if (f.shares === 0) {
-          const d = fetched[f.code];
+          const d = computedData ? computedData.fetched[f.code] : null;
           const price = calcBuyPrice(d);
           if (price > 0) { f.cost = price; f.shares = finalTodayBuy / price; }
         }
@@ -833,8 +779,7 @@ function saveFund() {
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
-      if (f && fetched[f.code]) { await refreshOne(f.code); }
-      render();
+      await computeAndRender();
       showToast('基金已更新');
     })();
     return;
@@ -866,19 +811,19 @@ function saveFund() {
       }
       const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] };
       funds.push(newFund);
-      fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+      if (!computedData) {
+        computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+      }
+      computedData.fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
       const today = new Date().toISOString().split('T')[0];
       if (d.dwjz > 0) {
         const v = (d.gsz - d.dwjz) / d.dwjz * 100;
         newFund.records = [{ d: today, v: parseFloat(v.toFixed(4)) }];
       }
-      const rv = newFund.records[0]?.v;
-      const p = rv !== undefined ? parseFloat(rv.toFixed(2)) : null;
-      periodsCache[code] = { w1: p, w2: p, m1: p, m3: p, y1: p, sinceAdd: p };
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
-      render();
+      await computeAndRender();
       showToast(`基金 ${code} 已添加`);
     } catch {
       showToast('无法获取数据，添加失败', true);
@@ -894,13 +839,11 @@ function deleteFund(code, groupId) {
   const name = f ? f.name : code;
   showConfirm(`删除基金「${name}」？`, async () => {
     funds = funds.filter(x => !(x.code === code && x.groupId === groupId));
-    // only clear fetched if no other fund uses this code
     if (!funds.some(x => x.code === code)) {
-      delete fetched[code];
-      delete periodsCache[code];
+      if (computedData) delete computedData.fetched[code];
     }
     await saveFunds(funds);
-    render();
+    await computeAndRender();
     showToast('基金已删除');
   });
 }
@@ -957,28 +900,6 @@ function fetchOne(code) {
 
 
 
-function updateGroupTabColors() {
-  // 当日盈亏分组汇总
-  const todayMap = {};
-  funds.forEach(f => {
-    if (f.shares > 0 && f.groupId) {
-      const d = fetched[f.code];
-      if (d && d.dwjz > 0) {
-        const tp = f.shares * (d.gsz - d.dwjz);
-        todayMap[f.groupId] = (todayMap[f.groupId] || 0) + tp;
-      }
-    }
-  });
-  document.querySelectorAll('.grp-tab[data-group-id]').forEach(tab => {
-    const gid = tab.dataset.groupId;
-    const p = todayMap[gid] ?? null;
-    const origColor = groups.find(g => g.id === gid)?.color || '#58a6ff';
-    if (p > 0) tab.style.setProperty('--dot-color', 'var(--red)');
-    else if (p < 0) tab.style.setProperty('--dot-color', 'var(--green)');
-    else tab.style.setProperty('--dot-color', origColor);
-  });
-}
-
 async function fetchAllFunds() {
   if (funds.length === 0) return;
   showLoading(true);
@@ -987,43 +908,18 @@ async function fetchAllFunds() {
     if (!resp.ok) throw new Error('Refresh failed');
     const data = await resp.json();
 
-    const newFetched = {};
-    const newPeriods = {};
-    (data.funds || []).forEach(f => {
-      newFetched[f.code] = { gsz: f.gsz, dwjz: f.dwjz, name: f.name, gztime: f.gztime };
-      newPeriods[f.code] = f.periods || {};
-    });
-    fetched = newFetched;
-    periodsCache = newPeriods;
-    summaryData = data.summary;
-    groupsProfit = data.groups_profit || {};
-
-    // Sync persistent data from backend (records accumulated, names updated)
-    if (data.funds && data.funds.length > 0) {
-      funds = (data.funds || []).map(f => {
-        const { gsz, dwjz, gztime, pct, periods, has_data, has_pos, total_paid, cur_val, profit, today_profit, ...rest } = f;
-        return rest;
-      });
-      // Recalculate todayBuy funds with latest price
-      let changed = false;
-      funds.forEach(f => {
-        if (f.todayBuy > 0 && newFetched[f.code]) {
-          const p = parseFloat(newFetched[f.code].gsz);
-          if (p > 0) {
-            f.cost = p;
-            f.shares = f.todayBuy / p;
-            f.todayBuy = 0;
-            changed = true;
-          }
-        }
-      });
-      if (changed) saveFunds(funds);
-    }
-
+    computedData = data;
+    funds = data.funds || [];
+    groups = data.groups || groups;
+    localStorage.setItem(LS_FUNDS, JSON.stringify(funds));
+    localStorage.setItem(LS_GROUPS, JSON.stringify(groups));
     render();
   } catch(e) {
     console.error(e);
     showToast('刷新失败', true);
+    if (!computedData) {
+      computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+    }
     render();
   } finally {
     showLoading(false);
@@ -1099,114 +995,105 @@ function sortRows(arr) {
   });
 }
 
+async function computeAndRender() {
+  try {
+    const resp = await fetch('/api/compute', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        funds: funds,
+        groups: groups,
+        curGroup: curGroup,
+        fetched: computedData ? computedData.fetched : {}
+      })
+    });
+    if (!resp.ok) return;
+    computedData = await resp.json();
+    render();
+  } catch(e) {
+    console.error(e);
+  }
+}
+
 function render() {
-  const filtered = getFilteredFunds();
-  const hasLive = Object.keys(fetched).length > 0 && filtered.length > 0;
+  const data = computedData;
+  if (!data || !data.rows) {
+    document.getElementById('summaryCard').style.display = 'none';
+    document.getElementById('tableCard').style.display = 'none';
+    document.getElementById('chartCard').style.display = 'none';
+    document.getElementById('fundTbody').innerHTML = '';
+    renderGroupTabs();
+    return;
+  }
+
+  const rows = data.rows;
+  const summary = data.summary;
+  const cfetched = data.fetched || {};
+  const hasLive = Object.keys(cfetched).length > 0 && rows.length > 0;
 
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-  const ts = `${todayStr} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
   document.getElementById('updateTime').textContent = `更新于 ${ts}`;
 
-  document.getElementById('summaryCard').style.display = filtered.length > 0 ? '' : 'none';
-  document.getElementById('tableCard').style.display = filtered.length > 0 ? '' : 'none';
+  document.getElementById('summaryCard').style.display = rows.length > 0 ? '' : 'none';
+  document.getElementById('tableCard').style.display = rows.length > 0 ? '' : 'none';
   document.getElementById('chartCard').style.display = hasLive ? '' : 'none';
 
   const gName = curGroup === 'all' ? '（全部）' : (groups.find(g => g.id === curGroup)?.name || '');
   document.getElementById('groupTitle').textContent = gName;
 
-  if (filtered.length === 0) {
+  if (rows.length === 0) {
     document.getElementById('fundTbody').innerHTML = '';
     document.getElementById('tableEmpty').style.display = '';
+    renderGroupTabs();
     return;
   }
   document.getElementById('tableEmpty').style.display = 'none';
 
-  // Build rows with live + computed data
-  const rows = [];
-  let maxAbs = 0.1;
-  filtered.forEach(f => {
-    const d = fetched[f.code];
-    const gsz = d ? parseFloat(d.gsz) : 0;
-    const dwjz = d ? parseFloat(d.dwjz) : 0;
-    const hasData = !!(d && !isNaN(gsz) && !isNaN(dwjz));
-    const pct = hasData && dwjz > 0 ? (gsz - dwjz) / dwjz * 100 : 0;
-    const hasPos = f.shares > 0;
-    const periods = periodsCache[f.code] || {};
-    const abbv = Math.abs(pct);
-    if (abbv > maxAbs) maxAbs = abbv;
+  // Update maxAbsPct for bar chart
+  maxAbsPct = 0.1;
+  rows.forEach(r => { if (r.hasData && Math.abs(r.pct) > maxAbsPct) maxAbsPct = Math.abs(r.pct); });
 
-    let totalPaid = 0, curVal = 0, profit = 0, todayProfit = 0;
-    if (hasData && hasPos) {
-      totalPaid = f.shares * f.cost;
-      curVal = f.shares * gsz;
-      profit = curVal - totalPaid;
-      const base = f.addTime === todayStr ? f.cost : dwjz;
-      todayProfit = base > 0 ? f.shares * (gsz - base) : 0;
-    }
-    rows.push({ ...f, gsz, dwjz, pct, hasData, hasPos, totalPaid, curVal, profit, todayProfit, periods });
-  });
-  maxAbsPct = maxAbs;
-
-  // Summary from filtered rows (per-group or all)
-  const posRows = rows.filter(r => r.hasPos);
-  const hasPos = posRows.length > 0;
-  let totalCost = 0, totalValue = 0, totalProfit = 0, totalToday = 0;
-  posRows.forEach(r => {
-    totalCost += r.totalPaid;
-    totalValue += r.curVal;
-    totalProfit += r.profit;
-    totalToday += r.todayProfit;
-  });
-  const totalPct = totalCost > 0 ? totalProfit / totalCost * 100 : 0;
-  const isUp = totalProfit >= 0;
-  const clr = isUp ? '#ff4d4f' : '#3fb950';
-  const todayUp = totalToday >= 0;
-  const todayClr = todayUp ? '#ff4d4f' : '#3fb950';
+  // Summary
+  const hasPos = rows.some(r => r.hasPos);
   const fmtY = v => '¥' + v.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2});
   const fmtInt = v => '¥' + Math.round(v).toLocaleString();
-  const fmtPct = v => v.toFixed(2);
-  document.getElementById('totalCost').textContent = totalCost > 0 ? fmtInt(totalCost) : (hasPos ? fmtInt(0) : '—');
-  document.getElementById('totalValue').textContent = totalCost > 0 ? fmtY(totalValue) : '—';
-  document.getElementById('totalProfit').textContent = totalCost > 0 ? (isUp?'+':'') + fmtY(totalProfit) : '—';
-  document.getElementById('totalProfit').style.color = totalCost > 0 ? clr : '#8b949e';
-  document.getElementById('totalTodayProfit').textContent = totalCost > 0 ? (todayUp?'+':'') + fmtY(totalToday) : '—';
-  document.getElementById('totalTodayProfit').style.color = totalCost > 0 ? todayClr : '#8b949e';
-  document.getElementById('totalPct').textContent = totalCost > 0 ? (isUp?'+':'') + fmtPct(totalPct) + '%' : '—';
-  document.getElementById('totalPct').style.color = totalCost > 0 ? clr : '#8b949e';
+  const isUp = summary.totalProfit >= 0;
+  const todayUp = summary.totalToday >= 0;
+  document.getElementById('totalCost').textContent = summary.totalCost > 0 ? fmtInt(summary.totalCost) : (hasPos ? fmtInt(0) : '—');
+  document.getElementById('totalValue').textContent = summary.totalCost > 0 ? fmtY(summary.totalValue) : '—';
+  document.getElementById('totalProfit').textContent = summary.totalCost > 0 ? (isUp?'+':'') + fmtY(summary.totalProfit) : '—';
+  document.getElementById('totalProfit').style.color = summary.totalCost > 0 ? (isUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
+  document.getElementById('totalTodayProfit').textContent = summary.totalCost > 0 ? (todayUp?'+':'') + fmtY(summary.totalToday) : '—';
+  document.getElementById('totalTodayProfit').style.color = summary.totalCost > 0 ? (todayUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
+  document.getElementById('totalPct').textContent = summary.totalCost > 0 ? (isUp?'+':'') + summary.totalPct.toFixed(2) + '%' : '—';
+  document.getElementById('totalPct').style.color = summary.totalCost > 0 ? (isUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
 
-  // Group profit breakdown
+  // Group breakdown
   const bpEl = document.getElementById('groupProfitBreakdown');
   if (curGroup === 'all' && hasPos) {
-    const gpMap = {};
-    rows.forEach(r => {
-      if (!r.hasPos) return;
-      const g = groups.find(x => x.id === r.groupId);
-      const gn = g ? g.name : '未分组';
-      if (!gpMap[gn]) gpMap[gn] = { profit: 0, cost: 0 };
-      gpMap[gn].profit += r.profit;
-      gpMap[gn].cost += r.totalPaid;
-    });
-    bpEl.style.display = 'flex';
-    bpEl.innerHTML = Object.entries(gpMap).map(([name, v]) => {
-      const pClr = v.profit >= 0 ? '#ff4d4f' : '#3fb950';
-      const pStr = (v.profit >= 0 ? '+' : '') + '¥' + v.profit.toFixed(2);
-      const pctStr = v.cost > 0 ? ((v.profit >= 0 ? '+' : '') + (v.profit / v.cost * 100).toFixed(2) + '%') : '';
+    const mode = getGroupProfitMode();
+    const bpParts = (data.groupBreakdown || []).map(item => {
+      const dp = mode === 'today' ? item.todayProfit : item.profit;
+      const pClr = dp >= 0 ? '#ff4d4f' : '#3fb950';
+      const pStr = (dp >= 0 ? '+' : '') + '¥' + dp.toFixed(2);
+      const pctStr = item.cost > 0 ? ((dp / item.cost * 100) >= 0 ? '+' : '') + (dp / item.cost * 100).toFixed(2) + '%' : '';
       return `<span style="font-size:.72rem;color:var(--text2);background:var(--elevated);padding:4px 10px;border-radius:6px;white-space:nowrap">
-        ${name}: <span style="color:${pClr};font-weight:700">${pStr}</span>${pctStr ? ' <span style="color:var(--muted)">|</span> <span style="color:' + pClr + '">' + pctStr + '</span>' : ''}
+        ${item.name}: <span style="color:${pClr};font-weight:700">${pStr}</span>${pctStr ? ' <span style="color:var(--muted)">|</span> <span style="color:' + pClr + '">' + pctStr + '</span>' : ''}
       </span>`;
-    }).join('');
+    });
+    bpEl.style.display = bpParts.length ? 'flex' : 'none';
+    bpEl.innerHTML = bpParts.join('');
   } else {
     bpEl.style.display = 'none';
   }
 
-  // Apply sort
+  // Sort
   sortRows(rows);
   updateSortIndicators();
 
   // Table rows
   const fmt = v => v.toFixed(2);
-
   let tbody = '';
   rows.forEach(r => {
     const rc = r.hasData ? (r.pct >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
@@ -1219,7 +1106,7 @@ function render() {
     tbody += `<tr>
       <td data-col="0"><div class="fc">${r.code}</div><div class="fname" title="${r.name}">${r.name}</div></td>
       <td data-col="1" class="r num">${r.hasPos ? fmtInt(r.totalPaid) : '—'}</td>
-      <td data-col="16" class="r num">${r.hasPos ? '¥' + r.cost.toFixed(4) : '—'}</td>
+      <td data-col="16" class="r num">${r.hasPos ? '¥' + (r.cost||0).toFixed(4) : '—'}</td>
       <td data-col="2" class="r num">${r.hasPos ? fmt(r.shares) : '—'}</td>
       <td data-col="3" class="r num">${fmtV(r.dwjz)}</td>
       <td data-col="4" class="r num bold" style="color:${rc}">${fmtV(r.gsz)}</td>
@@ -1230,9 +1117,9 @@ function render() {
       <td data-col="9" class="r bold" style="color:${pClr(periods.m3)}">${fmtPct(periods.m3)}</td>
       <td data-col="10" class="r bold" style="color:${pClr(periods.y1)}">${fmtPct(periods.y1)}</td>
       <td data-col="11" class="r bold" style="color:${pClr(periods.sinceAdd)}">${fmtPct(periods.sinceAdd)}</td>
+      <td data-col="13" class="r bold" style="color:${r.hasPos ? tc : 'var(--muted)'}">${r.hasPos ? (r.todayProfit>=0?'+':'') + fmtY(r.todayProfit) : '—'}</td>
       <td data-col="12" class="r bold" style="color:${r.hasPos ? pc : 'var(--muted)'}">${r.hasPos ? (r.profit>=0?'+':'') + fmtY(r.profit) : '—'}</td>
       <td data-col="17" class="r bold" style="color:${r.hasPos && r.totalPaid > 0 ? pc : 'var(--muted)'}">${r.hasPos && r.totalPaid > 0 ? (r.profit>=0?'+':'') + (r.profit / r.totalPaid * 100).toFixed(2) + '%' : '—'}</td>
-      <td data-col="13" class="r bold" style="color:${r.hasPos ? tc : 'var(--muted)'}">${r.hasPos ? (r.todayProfit>=0?'+':'') + fmtY(r.todayProfit) : '—'}</td>
       <td data-col="14" class="r num bold" style="color:${r.hasPos ? rc : 'var(--muted)'}">${r.hasPos ? fmtY(r.curVal) : '—'}</td>
       <td data-col="15"><div class="fund-actions">
         ${curGroup === 'all' ? '<span style="color:var(--muted);font-size:.7rem">合并</span>' :
@@ -1247,7 +1134,6 @@ function render() {
   applyColVis();
   renderBarChart(rows);
   renderPieChart(rows);
-  updateGroupTabColors();
   renderGroupTabs();
 }
 
@@ -1468,11 +1354,11 @@ function exportConfig() {
   URL.revokeObjectURL(url);
   showToast('配置文件已导出');
 }
-function importConfig(e) {
+async function importConfig(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = function(ev) {
+  reader.onload = async function(ev) {
     try {
       const cfg = JSON.parse(ev.target.result);
       if (cfg.groups) { groups = cfg.groups; saveGroups(groups); }
@@ -1480,8 +1366,7 @@ function importConfig(e) {
         cfg.funds.forEach(f => { if (!f.addTime) f.addTime = new Date().toISOString().split('T')[0]; if (!f.records) f.records = []; if (!f.shares) f.shares = 0; });
         funds = cfg.funds; saveFunds(funds);
       }
-      renderGroupTabs();
-      render();
+      await computeAndRender();
       showToast('配置文件已导入');
     } catch(err) { showToast('导入失败：配置文件格式错误', true); }
   };
@@ -1524,11 +1409,13 @@ document.querySelectorAll('script[id^="jsonp_script_"]').forEach(s => s.remove()
     groups.push({ id: 'watchlist', name: '自选', color: '#9e9e9e', watchlist: true });
     saveGroups(groups);
   }
-  renderGroupTabs();
+  // Initial computed data from local funds (no live data)
+  computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
   render();
   initColumnResize();
   initColVisibility();
   initSort();
+  await computeAndRender();
   if (funds.length > 0) {
     fetchAllFunds();
   }
