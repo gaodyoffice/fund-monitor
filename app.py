@@ -293,6 +293,24 @@ def api_save():
     write_config(current)
     return {'ok': True}
 
+@app.route('/api/fetch-one', methods=['POST'])
+def api_fetch_one():
+    """由后端代理抓取单只基金数据，盘后自动用官方净值修正 gsz"""
+    data = request.get_json(force=True)
+    code = data.get('code', '')
+    if not code or len(code) != 6:
+        return {'ok': False}, 400
+    d = fetch_one(code)
+    if not d:
+        return {'ok': False}, 404
+    # 非交易时段用官方净值替代 gsz
+    now = datetime.now()
+    if now.hour >= 15 or now.hour < 9:
+        nav = fetch_official_nav(code)
+        if nav and nav > 0:
+            d['gsz'] = nav
+    return {'ok': True, 'data': d}
+
 
 @app.route('/api/compute', methods=['POST'])
 def api_compute():
