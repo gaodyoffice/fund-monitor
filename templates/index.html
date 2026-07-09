@@ -678,7 +678,7 @@ function showAddFund(groupId) {
   document.getElementById('fundNameHint').textContent = '';
 
   const sel = document.getElementById('fundGroupSelect');
-  sel.innerHTML = '<option value="">未分组</option>';
+  sel.innerHTML = '';
   groups.forEach(g => {
     sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
   });
@@ -703,7 +703,7 @@ function showEditFund(code) {
   document.getElementById('fundNameHint').textContent = `单价 ¥${f.cost || '—'}，${f.shares || 0} 份 ${totalStr}`;
 
   const sel = document.getElementById('fundGroupSelect');
-  sel.innerHTML = '<option value="">未分组</option>';
+  sel.innerHTML = '';
   groups.forEach(g => {
     sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
   });
@@ -769,7 +769,11 @@ function saveFund() {
   (async () => {
     try {
       const d = await fetchOne(code);
-      const name = (d && d.name) ? d.name : code;
+      if (!d || !d.name) {
+        showToast('无法获取数据，添加失败', true);
+        return;
+      }
+      const name = d.name;
       let autoCost = finalCost;
       let autoShares = finalShares;
       if (finalTodayBuy > 0 && autoCost === 0 && autoShares === 0) {
@@ -778,30 +782,22 @@ function saveFund() {
       }
       const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] };
       funds.push(newFund);
-      // 单只基金刷新：live data + 初始 record + periods
-      if (d) {
-        fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
-        const today = new Date().toISOString().split('T')[0];
-        if (d.dwjz > 0) {
-          const v = (d.gsz - d.dwjz) / d.dwjz * 100;
-          newFund.records = [{ d: today, v: parseFloat(v.toFixed(4)) }];
-        }
-        const rv = newFund.records[0]?.v;
-        const p = rv !== undefined ? parseFloat(rv.toFixed(2)) : null;
-        periodsCache[code] = { w1: p, w2: p, m1: p, m3: p, y1: p, sinceAdd: p };
+      fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+      const today = new Date().toISOString().split('T')[0];
+      if (d.dwjz > 0) {
+        const v = (d.gsz - d.dwjz) / d.dwjz * 100;
+        newFund.records = [{ d: today, v: parseFloat(v.toFixed(4)) }];
       }
+      const rv = newFund.records[0]?.v;
+      const p = rv !== undefined ? parseFloat(rv.toFixed(2)) : null;
+      periodsCache[code] = { w1: p, w2: p, m1: p, m3: p, y1: p, sinceAdd: p };
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
       render();
       showToast(`基金 ${code} 已添加`);
     } catch {
-      funds.push({ code, name: code + ' (名称获取失败)', cost: finalCost, shares: finalShares > 0 ? finalShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] });
-      await saveFunds(funds);
-      lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
-      closeModal('fundModal');
-      render();
-      showToast(`基金 ${code} 已添加`);
+      showToast('无法获取数据，添加失败', true);
     } finally {
       btn.textContent = orig;
       btn.disabled = false;
@@ -1092,6 +1088,7 @@ function render() {
   renderBarChart(rows);
   renderPieChart(rows);
   updateGroupTabColors();
+  renderGroupTabs();
 }
 
 function renderBarChart(rows) {
