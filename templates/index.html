@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+<title>基金实时看板</title>
+<style>
+:root{--bg:#0d1117;--bg-card:#161b22;--text:#c9d1d9;--text2:#8b949e;--muted:#484f58;--border:#30363d;--border2:#21262d;--accent:#58a6ff;--accent-bg:rgba(88,166,255,.15);--accent-bg2:rgba(88,166,255,.25);--accent-bg3:rgba(88,166,255,.4);--accent-bg4:rgba(88,166,255,.06);--overlay:rgba(13,17,23,.85);--card-bg:rgba(255,255,255,.04);--card-border:rgba(255,255,255,.08);--elevated:rgba(255,255,255,.03);--ghost:rgba(255,255,255,.06);--hover:rgba(255,255,255,.02);--btn-primary:#238636;--btn-danger:#da3633;--btn-edit:#b37b00;--green:#3fb950;--red:#ff4d4f;--toast:rgba(35,134,54,.95);--toast-err:rgba(218,54,51,.95)}
+.theme-light{--bg:#fff;--bg-card:#f0f0f0;--text:#1a1a1a;--text2:#555;--muted:#888;--border:#d0d0d0;--border2:#e0e0e0;--accent:#1a73e8;--accent-bg:rgba(26,115,232,.1);--accent-bg2:rgba(26,115,232,.15);--accent-bg3:rgba(26,115,232,.25);--accent-bg4:rgba(26,115,232,.06);--overlay:rgba(255,255,255,.85);--card-bg:rgba(0,0,0,.03);--card-border:rgba(0,0,0,.08);--elevated:rgba(0,0,0,.02);--ghost:rgba(0,0,0,.05);--hover:rgba(0,0,0,.02);--btn-primary:#1a73e8;--btn-danger:#d93025;--btn-edit:#e37400;--toast:rgba(26,115,232,.9);--toast-err:rgba(217,48,37,.9)}
+.theme-silver{--bg:#1e1e1e;--bg-card:#2d2d2d;--text:#e0e0e0;--text2:#a0a0a0;--muted:#707070;--border:#404040;--border2:#333;--accent:#9e9e9e;--accent-bg:rgba(158,158,158,.12);--accent-bg2:rgba(158,158,158,.2);--accent-bg3:rgba(158,158,158,.3);--accent-bg4:rgba(158,158,158,.08);--overlay:rgba(0,0,0,.7);--card-bg:rgba(255,255,255,.05);--card-border:rgba(255,255,255,.08);--elevated:rgba(255,255,255,.04);--ghost:rgba(255,255,255,.07);--hover:rgba(255,255,255,.03);--btn-primary:#616161;--btn-danger:#d93025;--btn-edit:#e37400;--toast:rgba(97,97,97,.95);--toast-err:rgba(217,48,37,.9)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:0 0 32px}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.theme-select{background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:.72rem;font-family:inherit;cursor:pointer;outline:none}
+
+/* Header */
+.hd{text-align:center;padding:20px 12px 8px;position:sticky;top:0;background:var(--bg);z-index:10;border-bottom:1px solid var(--border2)}
+.hd h1{font-size:1.3rem;color:var(--accent);letter-spacing:1px}
+.hd .sub{font-size:.7rem;color:var(--text2);margin-top:4px}
+.hd .ctrl{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px;flex-wrap:wrap}
+.ctrl .live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite;display:inline-block}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.ctrl button{padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:.78rem;font-family:inherit;transition:opacity .2s;white-space:nowrap}
+.ctrl button:hover{opacity:.85}
+.ctrl button:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--btn-primary);color:#fff}
+.btn-edit{background:var(--btn-edit);color:#fff}
+.btn-danger{background:var(--btn-danger);color:#fff}
+.btn-ghost{background:var(--ghost);color:var(--text);border:1px solid var(--border)}
+.ctrl .cd{font-size:.72rem;color:var(--muted)}
+.cd{font-size:.72rem;color:var(--muted);margin-left:6px}
+.hd .row2{display:flex;gap:6px;justify-content:center;align-items:center;margin-top:6px;flex-wrap:wrap}
+
+/* Group Tabs */
+.grp-tabs{display:flex;gap:6px;padding:10px 12px;overflow-x:auto;scrollbar-width:none;position:sticky;top:56px;background:var(--bg);z-index:9;border-bottom:1px solid var(--border2)}
+.grp-tabs::-webkit-scrollbar{display:none}
+.grp-tab{padding:5px 14px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-size:.78rem;font-family:inherit;white-space:nowrap;transition:all .2s;flex-shrink:0}
+.grp-tab:hover{border-color:var(--accent);color:var(--accent)}
+.grp-tab.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.grp-tab-add{background:transparent;border:1px dashed var(--border);color:var(--muted);padding:5px 10px}
+.grp-tab-add:hover{border-color:var(--text2);color:var(--text2)}
+.grp-tab .del{display:none;margin-left:6px;font-size:.7rem;color:var(--muted);cursor:pointer}
+.grp-tab:hover .del{display:inline}
+.grp-tab .del:hover{color:var(--btn-danger)}
+.grp-tab.drag-over{border-color:var(--accent);background:var(--accent-bg2)}
+.grp-edit-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.7rem;margin-left:4px;display:none}
+.grp-tab:hover .grp-edit-btn{display:inline}
+.grp-tab .grp-edit-btn:hover{color:var(--accent)}
+
+/* Card */
+.card{background:var(--card-bg);border:1px solid var(--card-border);border-radius:10px;padding:14px 16px;margin:12px;margin-top:0}
+.card-title{font-size:.72rem;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+
+/* Summary Grid */
+.sum-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.sum-item{text-align:center;padding:10px 4px;background:var(--elevated);border-radius:8px}
+.sum-item .sv{font-size:1.1rem;font-weight:700}
+.sum-item .sl{font-size:.68rem;color:var(--text2);margin-top:3px}
+@media(max-width:600px){.sum-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* Fund Table */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.76rem}
+@media(max-width:600px){
+  table{font-size:.68rem}
+  th,td{padding:3px 2px}
+  .fc{font-size:.7rem}
+  .fname{font-size:.55rem}
+}
+th{color:var(--text2);font-size:.7rem;padding:5px 4px;text-align:right;border-bottom:1px solid var(--card-border);white-space:nowrap;position:relative;user-select:none}
+@media(max-width:600px){th{font-size:.6rem;padding:4px 2px}}
+th:first-child{text-align:left;min-width:80px}
+.resize-handle{position:absolute;right:-2px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:2}
+.resize-handle:hover,.resize-handle.active{background:var(--accent-bg3)}
+td{padding:4px 4px;border-bottom:1px solid var(--card-border);vertical-align:middle;white-space:nowrap}
+@media(max-width:600px){td{padding:3px 2px}}
+td:first-child{text-align:left}
+td.r{text-align:right}
+tr:hover td{background:var(--hover)}
+.fc{font-weight:700;color:var(--accent);font-size:.78rem;line-height:1.3}
+.fname{color:var(--text2);font-size:.62rem;display:block;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* col-visibility */
+.col-panel{position:absolute;top:100%;right:0;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:8px 12px;z-index:20;display:none;min-width:120px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.col-panel.show{display:block}
+.col-panel label{display:flex;align-items:center;gap:6px;font-size:.74rem;color:var(--text);cursor:pointer;padding:3px 0}
+.col-panel label input{cursor:pointer}
+.num{font-family:monospace}
+.bold{font-weight:700}
+.group-row td{background:var(--accent-bg4);color:var(--accent);font-size:.72rem;font-weight:700;padding:4px 6px}
+.fund-actions{display:flex;gap:4px;justify-content:flex-end}
+.fund-actions button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.7rem;padding:2px 4px;border-radius:3px}
+.fund-actions button:hover{color:var(--accent)}
+.fund-actions .del-btn:hover{color:var(--btn-danger)}
+
+/* Charts */
+.chart-row{display:flex;gap:16px;flex-wrap:wrap}
+.chart-col{flex:1;min-width:280px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bar-label{font-size:.7rem;color:var(--text2);flex-shrink:0;text-align:left;line-height:1.6;white-space:nowrap}
+.bar-track{flex:1;height:7px;background:var(--ghost);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;transition:width .5s}
+.bar-val{width:56px;text-align:right;font-size:.74rem;font-weight:700;flex-shrink:0}
+
+/* Pie */
+.pie-wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.pie-svg{flex-shrink:0}
+.pie-legend{flex:1;min-width:140px}
+.leg-item{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.74rem}
+.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.leg-name{color:var(--text);width:50px;overflow:hidden;text-overflow:ellipsis}
+.leg-pct{color:var(--text2);width:36px;text-align:right}
+
+/* Empty state */
+.empty{padding:24px;text-align:center;color:var(--muted);font-size:.82rem}
+
+/* Modal */
+.modal-overlay{position:fixed;inset:0;background:var(--overlay);z-index:100;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.show{display:flex}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:380px;max-height:80vh;overflow-y:auto}
+.modal h3{font-size:.95rem;color:var(--accent);margin-bottom:14px}
+.modal label{display:block;font-size:.78rem;color:var(--text2);margin-bottom:4px;margin-top:10px}
+.modal label:first-of-type{margin-top:0}
+.modal .chk-label{display:flex;align-items:center;gap:6px;font-size:.78rem;color:var(--text2);margin-top:10px;cursor:pointer}
+.modal .chk-label input{cursor:pointer}
+.modal input,.modal select{width:100%;padding:8px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:.84rem;font-family:monospace;outline:none;transition:border-color .2s}
+.modal input:focus,.modal select:focus{border-color:var(--accent)}
+.modal select{font-family:inherit;cursor:pointer}
+.modal .btns{display:flex;gap:8px;margin-top:16px}
+.modal .btns button{flex:1;padding:7px 0;border-radius:6px;border:none;cursor:pointer;font-size:.82rem;font-family:inherit;transition:opacity .2s}
+.modal .btns button:hover{opacity:.85}
+.modal .btns .ok{background:var(--btn-primary);color:#fff}
+.modal .btns .cancel{background:var(--ghost);color:var(--text2)}
+.modal .btns .danger{background:var(--btn-danger);color:#fff}
+.modal .hint{font-size:.7rem;color:var(--muted);margin-top:4px}
+
+/* Toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--toast);color:#fff;padding:8px 18px;border-radius:8px;font-size:.8rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1}
+.toast.err{background:var(--toast-err)}
+
+/* Loading */
+.loading-overlay{position:fixed;inset:0;background:var(--overlay);display:none;align-items:center;justify-content:center;z-index:100;font-size:.9rem;color:var(--accent)}
+.loading-overlay.show{display:flex}
+
+.footer{text-align:center;font-size:.68rem;color:var(--muted);margin-top:8px;padding:0 12px}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <h1>📈 基金实时看板</h1>
+  <div class="sub"><span id="updateTime">加载中…</span> <span class="cd" id="countdown">5:00 后自动刷新</span></div>
+  <div class="ctrl">
+    <span id="liveDot" class="live-dot"></span>
+    <button class="btn-primary" id="refreshBtn" onclick="fetchAll()">🔄 刷新</button>
+    <button class="btn-ghost" id="addFundBtn" onclick="showAddFund()">＋ 添加基金</button>
+    <button class="btn-ghost" onclick="document.getElementById('importInput').click()" title="导入 funds.json 配置文件" style="font-size:.7rem">⬆ 导入配置</button>
+    <button class="btn-ghost" onclick="exportConfig()" title="导出 funds.json 配置文件" style="font-size:.7rem">⬇ 导出配置</button>
+    <input id="importInput" type="file" accept=".json" style="display:none" onchange="importConfig(event)">
+    <select id="themeSelect" class="theme-select" onchange="switchTheme(this.value)">
+      <option value="dark">🌙 深色</option>
+      <option value="light">☀️ 白色</option>
+      <option value="silver">🌑 深灰</option>
+    </select>
+  </div>
+</div>
+
+<div class="grp-tabs" id="groupTabs"></div>
+
+<div class="card" id="summaryCard" style="display:none">
+  <div class="card-title">▸ 总览</div>
+  <div class="sum-grid">
+    <div class="sum-item"><div class="sv" id="totalCost" style="color:#58a6ff">—</div><div class="sl">持仓成本</div></div>
+    <div class="sum-item"><div class="sv" id="totalValue" style="color:#58a6ff">—</div><div class="sl">估算市值</div></div>
+    <div class="sum-item"><div class="sv" id="totalProfit">—</div><div class="sl">浮动盈亏</div></div>
+    <div class="sum-item"><div class="sv" id="totalTodayProfit">—</div><div class="sl">今日盈亏</div></div>
+    <div class="sum-item"><div class="sv" id="totalPct">—</div><div class="sl">综合收益率</div></div>
+  </div>
+  <div id="groupProfitBreakdown" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
+</div>
+
+<div class="card" id="tableCard" style="display:none">
+  <div class="card-title" style="display:flex;align-items:center;gap:8px;position:relative">
+    <span>▸ 基金明细</span>
+    <span id="groupTitle" style="color:#484f58;font-size:.7rem"></span>
+    <button class="btn-ghost" id="colToggleBtn" style="margin-left:auto;font-size:.68rem;padding:2px 8px">☰ 列显隐</button>
+    <div class="col-panel" id="colPanel">
+      <label><input type="checkbox" checked data-col="1"> 总投入</label>
+      <label><input type="checkbox" checked data-col="16"> 持仓单价</label>
+      <label><input type="checkbox" checked data-col="2"> 份额</label>
+      <label><input type="checkbox" checked data-col="3"> 昨日净值</label>
+      <label><input type="checkbox" checked data-col="4"> 实时估值</label>
+      <label><input type="checkbox" checked data-col="5"> 涨跌幅</label>
+      <label><input type="checkbox" checked data-col="6"> 周涨幅</label>
+      <label><input type="checkbox" checked data-col="7"> 2周涨幅</label>
+      <label><input type="checkbox" checked data-col="8"> 月涨幅</label>
+      <label><input type="checkbox" checked data-col="9"> 3月涨幅</label>
+      <label><input type="checkbox" checked data-col="10"> 年涨幅</label>
+      <label><input type="checkbox" checked data-col="11"> 累计涨幅</label>
+      <label><input type="checkbox" checked data-col="12"> 浮动盈亏</label>
+      <label><input type="checkbox" checked data-col="17"> 持仓收益</label>
+      <label><input type="checkbox" checked data-col="13"> 今日盈亏</label>
+      <label><input type="checkbox" checked data-col="14"> 估算市值</label>
+    </div>
+  </div>
+  <div class="table-wrap"><table id="fundTable"><thead><tr>
+    <th data-col="0">代码 / 名称</th>
+    <th data-col="1">总投入</th>
+    <th data-col="16">持仓单价</th>
+    <th data-col="2">份额</th>
+    <th data-col="3">昨日净值</th>
+    <th data-col="4">实时估值</th>
+    <th data-col="5">涨跌幅</th>
+    <th data-col="6">周涨幅</th>
+    <th data-col="7">2周涨幅</th>
+    <th data-col="8">月涨幅</th>
+    <th data-col="9">3月涨幅</th>
+    <th data-col="10">年涨幅</th>
+    <th data-col="11">累计涨幅</th>
+    <th data-col="12">浮动盈亏</th>
+    <th data-col="17">持仓收益</th>
+    <th data-col="13">今日盈亏</th>
+    <th data-col="14">估算市值</th>
+    <th data-col="15"></th>
+  </tr></thead><tbody id="fundTbody"></tbody></table></div>
+  <div id="tableEmpty" class="empty">暂无基金，点击「＋ 添加基金」开始</div>
+</div>
+
+<div class="card" id="chartCard" style="display:none">
+  <div class="card-title">▸ 涨跌幅对比 & 持仓分布</div>
+  <div class="chart-row">
+    <div class="chart-col" id="barChart"></div>
+    <div class="chart-col">
+      <div class="pie-wrap">
+        <svg class="pie-svg" id="pieSvg" width="160" height="160" viewBox="0 0 160 160"></svg>
+        <div class="pie-legend" id="pieLegend"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">盘中估值仅供参考，以基金公司公布的实际净值为准</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+<div class="loading-overlay" id="loading">正在获取实时数据…</div>
+
+<!-- Modal: Add/Edit Fund -->
+<div class="modal-overlay" id="fundModal">
+  <div class="modal">
+    <h3 id="fundModalTitle">添加基金</h3>
+    <label>所属分组</label>
+    <select id="fundGroupSelect"></select>
+    <label>基金代码</label>
+    <input id="fundCode" placeholder="6位基金代码，如 008702" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
+    <label>今日买进金额（元）<span style="color:#484f58;font-weight:normal">（选填，判定买进价格）</span></label>
+    <input id="fundTodayBuy" type="number" min="0" step="0.01" placeholder="今日买入金额">
+    <label>持仓成本（元）<span style="color:#484f58;font-weight:normal">（选填，单价）</span></label>
+    <input id="fundCost" type="number" min="0" step="0.0001" placeholder="买入单价">
+    <label>持有份额 <span style="color:#484f58;font-weight:normal">（选填）</span></label>
+    <input id="fundShares" type="number" min="0" step="0.01" placeholder="持有份额">
+    <div class="hint" id="fundNameHint">不填持仓信息则只观察。今日买进金额自动按实时估值计算份额。</div>
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('fundModal')">取消</button>
+      <button class="ok" id="fundOkBtn" onclick="saveFund()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add/Edit Group -->
+<div class="modal-overlay" id="groupModal">
+  <div class="modal">
+    <h3 id="groupModalTitle">新建分组</h3>
+    <label>分组名称</label>
+    <input id="groupName" placeholder="如：科技、消费" maxlength="20">
+    <label>颜色</label>
+    <input id="groupColor" type="color" value="#58a6ff" style="height:36px;padding:2px;cursor:pointer">
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('groupModal')">取消</button>
+      <button class="ok" id="groupOkBtn" onclick="saveGroup()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Buy Fund -->
+<div class="modal-overlay" id="buyModal">
+  <div class="modal">
+    <h3 id="buyModalTitle">买进基金</h3>
+    <div id="buyFundInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
+    <label>目标分组</label>
+    <select id="buyGroupSelect"></select>
+    <label>买入金额（元）</label>
+    <input id="buyCost" type="number" min="0" step="0.01" placeholder="总投入金额">
+    <label>持有份额</label>
+    <input id="buyShares" type="number" min="0" step="0.01" placeholder="买入份额">
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('buyModal')">取消</button>
+      <button class="ok" onclick="confirmBuy()">确认买进</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Delete -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h3>确认删除</h3>
+    <p id="confirmMsg" style="font-size:.84rem;color:#c9d1d9"></p>
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('confirmModal')">取消</button>
+      <button class="danger" id="confirmOkBtn" onclick="confirmDelete()">删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Position -->
+<div class="modal-overlay" id="addPosModal">
+  <div class="modal">
+    <h3 id="addPosTitle">加仓</h3>
+    <div id="addPosInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
+    <label>加仓份额</label>
+    <input id="addPosShares" type="number" min="0" step="0.01" placeholder="本次加仓份额">
+    <label>加仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
+    <input id="addPosPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('addPosModal')">取消</button>
+      <button class="ok" onclick="confirmAddPosition()">确认加仓</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ DATA LAYER ============ */
+const LS_GROUPS = 'fm_groups';
+const LS_FUNDS = 'fm_funds';
+
+function loadGroups() {
+  try { return JSON.parse(localStorage.getItem(LS_GROUPS)) || []; } catch(e) { return []; }
+}
+function saveGroups(g) {
+  localStorage.setItem(LS_GROUPS, JSON.stringify(g));
+  return syncServer();
+}
+
+function loadFunds() {
+  try { return JSON.parse(localStorage.getItem(LS_FUNDS)) || []; } catch(e) { return []; }
+}
+function saveFunds(f) {
+  localStorage.setItem(LS_FUNDS, JSON.stringify(f));
+  return syncServer();
+}
+function syncServer() {
+  return fetch('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({groups: groups, funds: funds}) }).catch(()=>{});
+}
+
+let groups = loadGroups();
+let funds = loadFunds();
+let curGroup = 'all'; // 'all' or group id
+let fetched = {};     // {code: {gsz, dwjz, name, gztime}}
+let periodsCache = {}; // {code: {w1, w2, m1, m3, y1, sinceAdd}}
+let summaryData = null; // {total_cost, total_value, total_profit, total_today, total_pct}
+let groupsProfit = {}; // {groupId: profit}
+let refreshInterval = 300;
+let lastGroupId = localStorage.getItem('fm_last_group') || '';
+let editingFundCode = null; // for edit mode
+
+/* ============ THEME ============ */
+function switchTheme(t) {
+  document.body.className = 'theme-' + t;
+  localStorage.setItem('fm_theme', t);
+}
+
+/* ============ BUY FUND ============ */
+let buyTargetCode = null;
+
+function buyFund(code) {
+  buyTargetCode = code;
+  const f = funds.find(x => x.code === code);
+  if (!f) return;
+  document.getElementById('buyModalTitle').textContent = '买进 ' + f.name;
+  document.getElementById('buyFundInfo').textContent = '当前：自选观察中 | 代码：' + f.code;
+  document.getElementById('buyCost').value = '';
+  document.getElementById('buyShares').value = '';
+  const sel = document.getElementById('buyGroupSelect');
+  sel.innerHTML = '<option value="">请选择分组…</option>';
+  groups.forEach(g => {
+    if (!g.watchlist) sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+  });
+  showModal('buyModal');
+}
+
+function confirmBuy() {
+  const f = funds.find(x => x.code === buyTargetCode);
+  if (!f) return;
+  const groupId = document.getElementById('buyGroupSelect').value;
+  const cost = parseFloat(document.getElementById('buyCost').value);
+  const sharesInput = document.getElementById('buyShares').value;
+  if (!groupId) { showToast('请选择目标分组', true); return; }
+  if (isNaN(cost) || cost <= 0) { showToast('请输入买入金额', true); return; }
+  const finalShares = sharesInput.trim() !== '' ? parseFloat(sharesInput) : 0;
+  if (finalShares <= 0) { showToast('请填写持有份额', true); return; }
+  f.groupId = groupId;
+  f.cost = cost / finalShares;
+  f.shares = finalShares;
+  (async () => {
+    await saveFunds(funds);
+    closeModal('buyModal');
+    if (fetched[f.code]) { await refreshOne(f.code); }
+    render();
+    showToast('已买进 ' + f.name);
+  })();
+}
+function refreshOne(code) {
+  return fetchOne(code).then(d => {
+    if (d) {
+      fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+    }
+    return d;
+  });
+}
+let addPosCode = null;
+function addPosition(code) {
+  addPosCode = code;
+  const f = funds.find(x => x.code === code);
+  if (!f) return;
+  const d = fetched[code];
+  const curPrice = d ? d.gsz : '—';
+  document.getElementById('addPosTitle').textContent = '加仓 ' + f.name;
+  const posInfo = f.shares > 0 ? `单价 ¥${f.cost}，${f.shares}份，总投入 ¥${(f.cost*f.shares).toFixed(2)}` : '暂无持仓';
+  document.getElementById('addPosInfo').textContent = `${posInfo} | 当前估值：${curPrice}`;
+  document.getElementById('addPosShares').value = '';
+  document.getElementById('addPosPrice').value = '';
+  showModal('addPosModal');
+}
+
+function confirmAddPosition() {
+  const f = funds.find(x => x.code === addPosCode);
+  if (!f) return;
+  const addShares = parseFloat(document.getElementById('addPosShares').value);
+  let addPrice = parseFloat(document.getElementById('addPosPrice').value);
+  if (isNaN(addShares) || addShares <= 0) { showToast('请输入加仓份额', true); return; }
+  if (isNaN(addPrice) || addPrice <= 0) {
+    const d = fetched[addPosCode];
+    if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
+    addPrice = parseFloat(d.gsz);
+  }
+  const oldTotal = (f.cost || 0) * (f.shares || 0);
+  const newTotal = addShares * addPrice;
+  f.shares = (f.shares || 0) + addShares;
+  f.cost = (oldTotal + newTotal) / f.shares;
+  (async () => {
+    await saveFunds(funds);
+    closeModal('addPosModal');
+    await refreshOne(addPosCode);
+    render();
+    showToast(`加仓完成：+${addShares}份，追加 ¥${newTotal.toFixed(2)}`);
+  })();
+}
+
+/* ============ TOAST / LOADING ============ */
+let toastTimer;
+function showToast(msg, isErr) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = 'toast', 2500);
+}
+
+let loadingCount = 0;
+function showLoading(v) {
+  if (v) loadingCount++; else loadingCount = Math.max(0, loadingCount - 1);
+  document.getElementById('loading').className = 'loading-overlay' + (loadingCount > 0 ? ' show' : '');
+}
+
+/* ============ MODAL ============ */
+function showModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function closeAllModals() {
+  ['fundModal','groupModal','confirmModal','buyModal','addPosModal'].forEach(id => closeModal(id));
+}
+
+let confirmCb = null;
+function showConfirm(msg, cb) {
+  document.getElementById('confirmMsg').textContent = msg;
+  confirmCb = cb;
+  showModal('confirmModal');
+}
+function confirmDelete() {
+  closeModal('confirmModal');
+  if (confirmCb) { confirmCb(); confirmCb = null; }
+}
+
+/* ============ GROUP CRUD ============ */
+function getGroupProfit(gid) {
+  let profit = 0, cost = 0;
+  funds.forEach(f => {
+    if (f.groupId !== gid || !f.shares || f.shares <= 0) return;
+    const d = fetched[f.code];
+    if (!d) return;
+    const gsz = parseFloat(d.gsz) || 0;
+    const totalPaid = f.shares * f.cost;
+    const curVal = f.shares * gsz;
+    profit += curVal - totalPaid;
+    cost += totalPaid;
+  });
+  return { profit, cost };
+}
+
+function renderGroupTabs() {
+  const el = document.getElementById('groupTabs');
+  const wlGroup = groups.find(g => g.id === 'watchlist');
+  let html = `<button class="grp-tab ${curGroup==='all'?'active':''}" onclick="switchGroup('all')">全部</button>`;
+  if (wlGroup) {
+    const wlActive = curGroup === 'watchlist' ? 'active' : '';
+    html += `<button class="grp-tab ${wlActive}" data-group-id="watchlist" onclick="switchGroup('watchlist')" style="--dot-color:${wlGroup.color}">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle"></span>
+      自选
+    </button>`;
+  }
+  groups.forEach(g => {
+    if (g.id === 'watchlist') return;
+    const active = curGroup === g.id ? 'active' : '';
+    const gp = getGroupProfit(g.id);
+    const pStr = gp.profit !== 0 ? ((gp.profit>0?'+':'') + '¥' + Math.round(gp.profit).toLocaleString()) : '';
+    const pClr = gp.profit > 0 ? '#ff4d4f' : (gp.profit < 0 ? '#3fb950' : '');
+    html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
+      <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle"></span>
+      ${g.name}${pStr ? ` <span style="color:${pClr};font-size:.68rem">${pStr}</span>` : ''}
+      <span class="grp-edit-btn" onclick="event.stopPropagation();showEditGroup('${g.id}')" title="编辑分组">✎</span>
+      <span class="del" onclick="event.stopPropagation();deleteGroup('${g.id}')" title="删除分组">×</span>
+    </button>`;
+  });
+  html += `<button class="grp-tab grp-tab-add" onclick="showAddGroup()">＋ 新建分组</button>`;
+  el.innerHTML = html;
+  el.querySelectorAll('.grp-tab[draggable]').forEach(t => t.draggable = true);
+}
+
+/* Drag & drop group reorder */
+document.getElementById('groupTabs').addEventListener('dragstart', e => {
+  const tab = e.target.closest('.grp-tab');
+  if (!tab || !tab.draggable) { e.preventDefault(); return; }
+  e.dataTransfer.setData('text/plain', tab.dataset.groupId);
+  e.dataTransfer.effectAllowed = 'move';
+});
+document.getElementById('groupTabs').addEventListener('dragover', e => {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const tab = e.target.closest('.grp-tab');
+  if (tab && tab.draggable) tab.classList.add('drag-over');
+});
+document.getElementById('groupTabs').addEventListener('dragleave', e => {
+  const tab = e.target.closest('.grp-tab');
+  if (tab) tab.classList.remove('drag-over');
+});
+document.getElementById('groupTabs').addEventListener('drop', e => {
+  e.preventDefault();
+  document.querySelectorAll('.grp-tab.drag-over').forEach(t => t.classList.remove('drag-over'));
+  const draggedId = e.dataTransfer.getData('text/plain');
+  const target = e.target.closest('.grp-tab');
+  if (!target || !target.draggable) return;
+  const targetId = target.dataset.groupId;
+  if (draggedId === targetId) return;
+  const idx = groups.findIndex(g => g.id === draggedId);
+  const targetIdx = groups.findIndex(g => g.id === targetId);
+  if (idx === -1 || targetIdx === -1) return;
+  const [moved] = groups.splice(idx, 1);
+  const adj = idx < targetIdx ? targetIdx - 1 : targetIdx;
+  groups.splice(adj, 0, moved);
+  saveGroups(groups);
+  renderGroupTabs();
+  render();
+});
+
+function switchGroup(id) {
+  curGroup = id;
+  renderGroupTabs();
+  render();
+}
+
+function showAddGroup() {
+  document.getElementById('groupModalTitle').textContent = '新建分组';
+  document.getElementById('groupName').value = '';
+  document.getElementById('groupColor').value = '#58a6ff';
+  document.getElementById('groupOkBtn').dataset.editId = '';
+  showModal('groupModal');
+}
+
+function showEditGroup(id) {
+  if (id === 'watchlist') { showToast('自选分组不可编辑', true); return; }
+  const g = groups.find(x => x.id === id);
+  if (!g) return;
+  document.getElementById('groupModalTitle').textContent = '编辑分组';
+  document.getElementById('groupName').value = g.name;
+  document.getElementById('groupColor').value = g.color;
+  document.getElementById('groupOkBtn').dataset.editId = id;
+  showModal('groupModal');
+}
+
+function saveGroup() {
+  const name = document.getElementById('groupName').value.trim();
+  const color = document.getElementById('groupColor').value;
+  const editId = document.getElementById('groupOkBtn').dataset.editId;
+
+  if (!name) { showToast('请输入分组名称', true); return; }
+
+  if (editId) {
+    const g = groups.find(x => x.id === editId);
+    if (g) { g.name = name; g.color = color; }
+  } else {
+    groups.push({ id: Date.now().toString(36), name, color, watchlist: false });
+  }
+  saveGroups(groups);
+  lastGroupId = ''; // reset after group edit
+  localStorage.setItem('fm_last_group', '');
+  closeModal('groupModal');
+  renderGroupTabs();
+  render();
+  showToast(editId ? '分组已更新' : '分组已创建');
+}
+
+function deleteGroup(id) {
+  if (id === 'watchlist') { showToast('自选分组不可删除', true); return; }
+  const g = groups.find(x => x.id === id);
+  if (!g) return;
+  const count = funds.filter(f => f.groupId === id).length;
+  const msg = count > 0 ? `删除分组「${g.name}」？该分组下 ${count} 只基金也将一并删除。` : `删除分组「${g.name}」？`;
+  showConfirm(msg, () => {
+    funds = funds.filter(f => f.groupId !== id);
+    saveFunds(funds);
+    groups = groups.filter(x => x.id !== id);
+    saveGroups(groups);
+    if (curGroup === id) curGroup = 'all';
+    renderGroupTabs();
+    render();
+    showToast(`分组已删除${count > 0 ? `，${count} 只基金已同步删除` : ''}`);
+  });
+}
+
+/* ============ FUND CRUD ============ */
+function getFilteredFunds() {
+  if (curGroup === 'all') {
+    // 全部：只显示有持仓，同代码跨组合并
+    const map = {};
+    funds.forEach(f => {
+      if (!f.shares || f.shares <= 0) return;
+      if (map[f.code]) {
+        const m = map[f.code];
+        const oldTotal = (m.cost || 0) * (m.shares || 0);
+        const addTotal = (f.cost || 0) * (f.shares || 0);
+        m.shares = (m.shares || 0) + (f.shares || 0);
+        m.cost = m.shares > 0 ? (oldTotal + addTotal) / m.shares : 0;
+        m.todayBuy = (m.todayBuy || 0) + (f.todayBuy || 0);
+        if (f.addTime && f.addTime < (m.addTime || '')) m.addTime = f.addTime;
+      } else {
+        map[f.code] = { ...f };
+      }
+    });
+    return Object.values(map);
+  }
+  return funds.filter(f => f.groupId === curGroup);
+}
+
+function showAddFund(groupId) {
+  editingFundCode = null;
+  document.getElementById('fundModalTitle').textContent = '添加基金';
+  document.getElementById('fundCode').value = '';
+  document.getElementById('fundCode').readOnly = false;
+  document.getElementById('fundTodayBuy').value = '';
+  document.getElementById('fundCost').value = '';
+  document.getElementById('fundShares').value = '';
+  document.getElementById('fundNameHint').textContent = '';
+
+  const sel = document.getElementById('fundGroupSelect');
+  sel.innerHTML = '<option value="">未分组</option>';
+  groups.forEach(g => {
+    sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+  });
+  if (groupId) sel.value = groupId;
+  else if (lastGroupId && [...sel.options].some(o => o.value === lastGroupId)) sel.value = lastGroupId;
+  else if (curGroup !== 'all' && [...sel.options].some(o => o.value === curGroup)) sel.value = curGroup;
+  document.getElementById('fundOkBtn').textContent = '获取信息并添加';
+  showModal('fundModal');
+}
+
+function showEditFund(code) {
+  const f = funds.find(x => x.code === code);
+  if (!f) return;
+  editingFundCode = code;
+  document.getElementById('fundModalTitle').textContent = '编辑基金';
+  document.getElementById('fundCode').value = f.code;
+  document.getElementById('fundCode').readOnly = true;
+  document.getElementById('fundTodayBuy').value = '';
+  document.getElementById('fundCost').value = f.cost;
+  document.getElementById('fundShares').value = f.shares || '';
+  const totalStr = (f.shares > 0 && f.cost > 0) ? `总投入 ¥${(f.cost * f.shares).toFixed(2)}` : '';
+  document.getElementById('fundNameHint').textContent = `单价 ¥${f.cost || '—'}，${f.shares || 0} 份 ${totalStr}`;
+
+  const sel = document.getElementById('fundGroupSelect');
+  sel.innerHTML = '<option value="">未分组</option>';
+  groups.forEach(g => {
+    sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+  });
+  sel.value = f.groupId || '';
+  document.getElementById('fundOkBtn').textContent = '保存';
+  showModal('fundModal');
+}
+
+function calcBuyPrice(d) {
+  if (!d) return 0;
+  const p = parseFloat(d.gsz);
+  if (!isNaN(p) && p > 0) return p;
+  return parseFloat(d.dwjz) || 0;
+}
+
+function saveFund() {
+  const code = document.getElementById('fundCode').value.trim();
+  const cost = parseFloat(document.getElementById('fundCost').value);
+  const sharesInput = document.getElementById('fundShares').value;
+  const todayBuyInput = document.getElementById('fundTodayBuy').value;
+  const groupId = document.getElementById('fundGroupSelect').value;
+
+  if (!code || code.length !== 6) { showToast('请输入6位基金代码', true); return; }
+  const finalCost = isNaN(cost) || cost <= 0 ? 0 : cost;
+  const finalShares = sharesInput.trim() !== '' ? parseFloat(sharesInput) : 0;
+  const finalTodayBuy = todayBuyInput.trim() !== '' ? parseFloat(todayBuyInput) : 0;
+
+  if (editingFundCode) {
+    const f = funds.find(x => x.code === editingFundCode);
+    if (f) {
+      f.groupId = groupId;
+      if (finalCost > 0 && finalShares > 0) { f.cost = finalCost; f.shares = finalShares; }
+      if (finalTodayBuy > 0) {
+        f.todayBuy = (f.todayBuy || 0) + finalTodayBuy;
+        if (f.shares === 0) {
+          const d = fetched[f.code];
+          const price = calcBuyPrice(d);
+          if (price > 0) { f.cost = price; f.shares = finalTodayBuy / price; }
+        }
+      }
+    }
+    (async () => {
+      await saveFunds(funds);
+      lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
+      closeModal('fundModal');
+      if (f && fetched[f.code]) { await refreshOne(f.code); }
+      render();
+      showToast('基金已更新');
+    })();
+    return;
+  }
+
+  if (groupId && funds.find(f => f.code === code && f.groupId === groupId)) {
+    showToast('该分组下已存在此基金', true);
+    return;
+  }
+
+  const btn = document.getElementById('fundOkBtn');
+  const orig = btn.textContent;
+  btn.textContent = '查询中…';
+  btn.disabled = true;
+
+  (async () => {
+    try {
+      const d = await fetchOne(code);
+      const name = (d && d.name) ? d.name : code;
+      let autoCost = finalCost;
+      let autoShares = finalShares;
+      if (finalTodayBuy > 0 && autoCost === 0 && autoShares === 0) {
+        const price = calcBuyPrice(d);
+        if (price > 0) { autoCost = price; autoShares = finalTodayBuy / price; }
+      }
+      const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] };
+      funds.push(newFund);
+      // 单只基金刷新：live data + 初始 record + periods
+      if (d) {
+        fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+        const today = new Date().toISOString().split('T')[0];
+        if (d.dwjz > 0) {
+          const v = (d.gsz - d.dwjz) / d.dwjz * 100;
+          newFund.records = [{ d: today, v: parseFloat(v.toFixed(4)) }];
+        }
+        const rv = newFund.records[0]?.v;
+        const p = rv !== undefined ? parseFloat(rv.toFixed(2)) : null;
+        periodsCache[code] = { w1: p, w2: p, m1: p, m3: p, y1: p, sinceAdd: p };
+      }
+      await saveFunds(funds);
+      lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
+      closeModal('fundModal');
+      render();
+      showToast(`基金 ${code} 已添加`);
+    } catch {
+      funds.push({ code, name: code + ' (名称获取失败)', cost: finalCost, shares: finalShares > 0 ? finalShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] });
+      await saveFunds(funds);
+      lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
+      closeModal('fundModal');
+      render();
+      showToast(`基金 ${code} 已添加`);
+    } finally {
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
+  })();
+}
+
+function deleteFund(code, groupId) {
+  const f = funds.find(x => x.code === code && x.groupId === groupId);
+  const name = f ? f.name : code;
+  showConfirm(`删除基金「${name}」？`, async () => {
+    funds = funds.filter(x => !(x.code === code && x.groupId === groupId));
+    // only clear fetched if no other fund uses this code
+    if (!funds.some(x => x.code === code)) {
+      delete fetched[code];
+      delete periodsCache[code];
+    }
+    await saveFunds(funds);
+    render();
+    showToast('基金已删除');
+  });
+}
+
+/* Reset fund modal code input readonly */
+document.getElementById('fundCode').addEventListener('focus', function() {
+  if (editingFundCode) return;
+  this.readOnly = false;
+});
+closeAllModals();
+
+/* ============ API FETCH ============ */
+window._jsonpCallbacks = {};
+window._jsonpTimers = {};
+
+window.jsonpgz = function(data) {
+  if (!data || !data.fundcode) return;
+  const code = data.fundcode;
+  if (window._jsonpCallbacks[code]) {
+    clearTimeout(window._jsonpTimers[code]);
+    window._jsonpCallbacks[code](data);
+    delete window._jsonpCallbacks[code];
+    delete window._jsonpTimers[code];
+    const el = document.getElementById('jsonp_script_' + code);
+    if (el) el.remove();
+  }
+};
+
+function fetchOne(code) {
+  return new Promise((resolve, reject) => {
+    window._jsonpCallbacks[code] = resolve;
+    window._jsonpTimers[code] = setTimeout(() => {
+      delete window._jsonpCallbacks[code];
+      delete window._jsonpTimers[code];
+      const el = document.getElementById('jsonp_script_' + code);
+      if (el) el.remove();
+      resolve(null);
+    }, 8000);
+
+    const s = document.createElement('script');
+    s.id = 'jsonp_script_' + code;
+    s.src = 'https://fundgz.1234567.com.cn/js/' + code + '.js?rt=' + Date.now();
+    s.onerror = function() {
+      clearTimeout(window._jsonpTimers[code]);
+      delete window._jsonpCallbacks[code];
+      delete window._jsonpTimers[code];
+      const el = document.getElementById('jsonp_script_' + code);
+      if (el) el.remove();
+      resolve(null);
+    };
+    document.head.appendChild(s);
+  });
+}
+
+
+
+function updateGroupTabColors() {
+  // 当日盈亏分组汇总
+  const todayMap = {};
+  funds.forEach(f => {
+    if (f.shares > 0 && f.groupId) {
+      const d = fetched[f.code];
+      if (d && d.dwjz > 0) {
+        const tp = f.shares * (d.gsz - d.dwjz);
+        todayMap[f.groupId] = (todayMap[f.groupId] || 0) + tp;
+      }
+    }
+  });
+  document.querySelectorAll('.grp-tab[data-group-id]').forEach(tab => {
+    const gid = tab.dataset.groupId;
+    const p = todayMap[gid] ?? null;
+    const origColor = groups.find(g => g.id === gid)?.color || '#58a6ff';
+    if (p > 0) tab.style.setProperty('--dot-color', 'var(--red)');
+    else if (p < 0) tab.style.setProperty('--dot-color', 'var(--green)');
+    else tab.style.setProperty('--dot-color', origColor);
+  });
+}
+
+async function fetchAllFunds() {
+  if (funds.length === 0) return;
+  showLoading(true);
+  try {
+    const resp = await fetch('/api/refresh', { method: 'POST' });
+    if (!resp.ok) throw new Error('Refresh failed');
+    const data = await resp.json();
+
+    fetched = {};
+    periodsCache = {};
+    (data.funds || []).forEach(f => {
+      fetched[f.code] = { gsz: f.gsz, dwjz: f.dwjz, name: f.name, gztime: f.gztime };
+      periodsCache[f.code] = f.periods || {};
+    });
+    summaryData = data.summary;
+    groupsProfit = data.groups_profit || {};
+
+    // Sync persistent data from backend (records accumulated, names updated)
+    if (data.funds && data.funds.length > 0) {
+      funds = (data.funds || []).map(f => {
+        const { gsz, dwjz, gztime, pct, periods, has_data, has_pos, total_paid, cur_val, profit, today_profit, ...rest } = f;
+        return rest;
+      });
+      saveFunds(funds);
+    }
+
+    render();
+  } catch(e) {
+    console.error(e);
+    showToast('刷新失败', true);
+    render();
+  } finally {
+    showLoading(false);
+  }
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('refreshBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = '刷新中…';
+  await fetchAllFunds();
+  btn.disabled = false;
+  btn.textContent = '🔄 刷新';
+  resetCountdown();
+}
+
+/* ============ RENDER ============ */
+let maxAbsPct = 10; // default
+
+function render() {
+  const filtered = getFilteredFunds();
+  const hasLive = Object.keys(fetched).length > 0 && filtered.length > 0;
+
+  const now = new Date();
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+  document.getElementById('updateTime').textContent = `更新于 ${ts}`;
+
+  document.getElementById('summaryCard').style.display = filtered.length > 0 ? '' : 'none';
+  document.getElementById('tableCard').style.display = filtered.length > 0 ? '' : 'none';
+  document.getElementById('chartCard').style.display = hasLive ? '' : 'none';
+
+  const gName = curGroup === 'all' ? '（全部）' : (groups.find(g => g.id === curGroup)?.name || '');
+  document.getElementById('groupTitle').textContent = gName;
+
+  if (filtered.length === 0) {
+    document.getElementById('fundTbody').innerHTML = '';
+    document.getElementById('tableEmpty').style.display = '';
+    return;
+  }
+  document.getElementById('tableEmpty').style.display = 'none';
+
+  // Build rows with live + computed data
+  const rows = [];
+  let maxAbs = 0.1;
+  filtered.forEach(f => {
+    const d = fetched[f.code];
+    const gsz = d ? parseFloat(d.gsz) : 0;
+    const dwjz = d ? parseFloat(d.dwjz) : 0;
+    const hasData = !!(d && !isNaN(gsz) && !isNaN(dwjz));
+    const pct = hasData && dwjz > 0 ? (gsz - dwjz) / dwjz * 100 : 0;
+    const hasPos = f.shares > 0;
+    const periods = periodsCache[f.code] || {};
+    const abbv = Math.abs(pct);
+    if (abbv > maxAbs) maxAbs = abbv;
+
+    let totalPaid = 0, curVal = 0, profit = 0, todayProfit = 0;
+    if (hasData && hasPos) {
+      totalPaid = f.shares * f.cost;
+      curVal = f.shares * gsz;
+      profit = curVal - totalPaid;
+      todayProfit = dwjz > 0 ? f.shares * (gsz - dwjz) : 0;
+    }
+    rows.push({ ...f, gsz, dwjz, pct, hasData, hasPos, totalPaid, curVal, profit, todayProfit, periods });
+  });
+  maxAbsPct = maxAbs;
+
+  // Summary from filtered rows (per-group or all)
+  const posRows = rows.filter(r => r.hasPos);
+  const hasPos = posRows.length > 0;
+  let totalCost = 0, totalValue = 0, totalProfit = 0, totalToday = 0;
+  posRows.forEach(r => {
+    totalCost += r.totalPaid;
+    totalValue += r.curVal;
+    totalProfit += r.profit;
+    totalToday += r.todayProfit;
+  });
+  const totalPct = totalCost > 0 ? totalProfit / totalCost * 100 : 0;
+  const isUp = totalProfit >= 0;
+  const clr = isUp ? '#ff4d4f' : '#3fb950';
+  const todayUp = totalToday >= 0;
+  const todayClr = todayUp ? '#ff4d4f' : '#3fb950';
+  const fmtY = v => '¥' + v.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:2});
+  const fmtInt = v => '¥' + Math.round(v).toLocaleString();
+  const fmtPct = v => v.toFixed(2);
+  document.getElementById('totalCost').textContent = totalCost > 0 ? fmtInt(totalCost) : (hasPos ? fmtInt(0) : '—');
+  document.getElementById('totalValue').textContent = totalCost > 0 ? fmtY(totalValue) : '—';
+  document.getElementById('totalProfit').textContent = totalCost > 0 ? (isUp?'+':'') + fmtY(totalProfit) : '—';
+  document.getElementById('totalProfit').style.color = totalCost > 0 ? clr : '#8b949e';
+  document.getElementById('totalTodayProfit').textContent = totalCost > 0 ? (todayUp?'+':'') + fmtY(totalToday) : '—';
+  document.getElementById('totalTodayProfit').style.color = totalCost > 0 ? todayClr : '#8b949e';
+  document.getElementById('totalPct').textContent = totalCost > 0 ? (isUp?'+':'') + fmtPct(totalPct) + '%' : '—';
+  document.getElementById('totalPct').style.color = totalCost > 0 ? clr : '#8b949e';
+
+  // Group profit breakdown
+  const bpEl = document.getElementById('groupProfitBreakdown');
+  if (curGroup === 'all' && hasPos) {
+    const gpMap = {};
+    rows.forEach(r => {
+      if (!r.hasPos) return;
+      const g = groups.find(x => x.id === r.groupId);
+      const gn = g ? g.name : '未分组';
+      if (!gpMap[gn]) gpMap[gn] = { profit: 0, cost: 0 };
+      gpMap[gn].profit += r.profit;
+      gpMap[gn].cost += r.totalPaid;
+    });
+    bpEl.style.display = 'flex';
+    bpEl.innerHTML = Object.entries(gpMap).map(([name, v]) => {
+      const pClr = v.profit >= 0 ? '#ff4d4f' : '#3fb950';
+      const pStr = (v.profit >= 0 ? '+' : '') + '¥' + v.profit.toFixed(2);
+      const pctStr = v.cost > 0 ? ((v.profit >= 0 ? '+' : '') + (v.profit / v.cost * 100).toFixed(2) + '%') : '';
+      return `<span style="font-size:.72rem;color:var(--text2);background:var(--elevated);padding:4px 10px;border-radius:6px;white-space:nowrap">
+        ${name}: <span style="color:${pClr};font-weight:700">${pStr}</span>${pctStr ? ' <span style="color:var(--muted)">|</span> <span style="color:' + pClr + '">' + pctStr + '</span>' : ''}
+      </span>`;
+    }).join('');
+  } else {
+    bpEl.style.display = 'none';
+  }
+
+  // Table rows
+  const fmt = v => v.toFixed(2);
+
+  let tbody = '';
+  rows.forEach(r => {
+    const rc = r.hasData ? (r.pct >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
+    const pc = r.hasData ? (r.profit >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
+    const tc = r.hasData ? (r.todayProfit >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
+    const periods = r.periods || {};
+    const fmtPct = v => v !== null && v !== undefined && isFinite(v) ? (v>=0?'+':'') + v.toFixed(2) + '%' : '—';
+    const pClr = v => v >= 0 ? '#ff4d4f' : (v < 0 ? '#3fb950' : 'var(--muted)');
+    const fmtV = v => r.hasData && isFinite(v) ? v.toFixed(4) : '—';
+    tbody += `<tr>
+      <td data-col="0"><div class="fc">${r.code}</div><div class="fname" title="${r.name}">${r.name}</div></td>
+      <td data-col="1" class="r num">${r.hasPos ? fmtInt(r.totalPaid) : '—'}</td>
+      <td data-col="16" class="r num">${r.hasPos ? '¥' + r.cost.toFixed(4) : '—'}</td>
+      <td data-col="2" class="r num">${r.hasPos ? fmt(r.shares) : '—'}</td>
+      <td data-col="3" class="r num">${fmtV(r.dwjz)}</td>
+      <td data-col="4" class="r num bold" style="color:${rc}">${fmtV(r.gsz)}</td>
+      <td data-col="5" class="r bold" style="color:${rc}">${r.hasData ? (r.pct>=0?'+':'') + fmt(r.pct) + '%' : '—'}</td>
+      <td data-col="6" class="r bold" style="color:${pClr(periods.w1)}">${fmtPct(periods.w1)}</td>
+      <td data-col="7" class="r bold" style="color:${pClr(periods.w2)}">${fmtPct(periods.w2)}</td>
+      <td data-col="8" class="r bold" style="color:${pClr(periods.m1)}">${fmtPct(periods.m1)}</td>
+      <td data-col="9" class="r bold" style="color:${pClr(periods.m3)}">${fmtPct(periods.m3)}</td>
+      <td data-col="10" class="r bold" style="color:${pClr(periods.y1)}">${fmtPct(periods.y1)}</td>
+      <td data-col="11" class="r bold" style="color:${pClr(periods.sinceAdd)}">${fmtPct(periods.sinceAdd)}</td>
+      <td data-col="12" class="r bold" style="color:${r.hasPos ? pc : 'var(--muted)'}">${r.hasPos ? (r.profit>=0?'+':'') + fmtY(r.profit) : '—'}</td>
+      <td data-col="17" class="r bold" style="color:${r.hasPos && r.totalPaid > 0 ? pc : 'var(--muted)'}">${r.hasPos && r.totalPaid > 0 ? (r.profit>=0?'+':'') + (r.profit / r.totalPaid * 100).toFixed(2) + '%' : '—'}</td>
+      <td data-col="13" class="r bold" style="color:${r.hasPos ? tc : 'var(--muted)'}">${r.hasPos ? (r.todayProfit>=0?'+':'') + fmtY(r.todayProfit) : '—'}</td>
+      <td data-col="14" class="r num bold" style="color:${r.hasPos ? rc : 'var(--muted)'}">${r.hasPos ? fmtY(r.curVal) : '—'}</td>
+      <td data-col="15"><div class="fund-actions">
+        ${curGroup === 'all' ? '<span style="color:var(--muted);font-size:.7rem">合并</span>' :
+          (r.hasPos ? `<button onclick="addPosition('${r.code}')" title="加仓">➕</button>` : `<button onclick="buyFund('${r.code}')" title="买进">💰</button>`) +
+          `<button onclick="showEditFund('${r.code}')" title="编辑">✎</button>` +
+          `<button class="del-btn" onclick="deleteFund('${r.code}','${r.groupId}')" title="删除">×</button>`
+        }
+      </div></td>
+    </tr>`;
+  });
+  document.getElementById('fundTbody').innerHTML = tbody;
+  applyColVis();
+  renderBarChart(rows);
+  renderPieChart(rows);
+  updateGroupTabColors();
+}
+
+function renderBarChart(rows) {
+  const el = document.getElementById('barChart');
+  if (rows.length === 0) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+
+  let html = '';
+  rows.forEach(r => {
+    const w = Math.abs(r.pct) / maxAbsPct * 100;
+    const c = r.pct >= 0 ? '#ff4d4f' : '#3fb950';
+    html += `<div class="bar-row">
+      <span class="bar-label" title="${r.code} ${r.name}">${r.code} ${r.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.max(w,2)}%;background:${c}"></div></div>
+      <span class="bar-val" style="color:${c}">${r.pct>=0?'+':''}${r.pct.toFixed(2)}%</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+  // normalize bar-label widths to the widest label
+  requestAnimationFrame(() => {
+    const labels2 = el.querySelectorAll('.bar-label');
+    if (labels2.length > 1) {
+      let maxW = 0;
+      labels2.forEach(l => { l.style.width = ''; l.style.maxWidth = ''; maxW = Math.max(maxW, l.scrollWidth); });
+      labels2.forEach(l => { l.style.width = maxW + 'px'; l.style.maxWidth = maxW + 'px'; });
+    }
+  });
+}
+
+function renderPieChart(rows) {
+  const posRows = rows.filter(r => r.hasPos);
+  const total = posRows.reduce((s, r) => s + r.totalPaid, 0);
+  const svg = document.getElementById('pieSvg');
+  const legend = document.getElementById('pieLegend');
+
+  if (total === 0 || posRows.length === 0) {
+    svg.innerHTML = '<circle cx="80" cy="80" r="70" fill="rgba(255,255,255,.03)"/>';
+    legend.innerHTML = '';
+    return;
+  }
+
+  const cx = 80, cy = 80, r = 65;
+  let startAngle = -90;
+  let paths = '', legs = '';
+  const colors = ['#58a6ff','#ff7a45','#73d13d','#ff4d4f','#9254de','#40a9ff','#ff85c2','#5cdbd3','#ffd666','#d4b106','#95de64','#36cfc9','#f759ab','#69b1ff','#ff9c6e'];
+
+  posRows.forEach((row, i) => {
+    const pct = row.totalPaid / total * 100;
+    const angle = pct / 100 * 360;
+    const endAngle = startAngle + angle;
+    const x1 = (cx + r * Math.cos(startAngle * Math.PI / 180)).toFixed(2);
+    const y1 = (cy + r * Math.sin(startAngle * Math.PI / 180)).toFixed(2);
+    const x2 = (cx + r * Math.cos(endAngle * Math.PI / 180)).toFixed(2);
+    const y2 = (cy + r * Math.sin(endAngle * Math.PI / 180)).toFixed(2);
+    const large = angle > 180 ? 1 : 0;
+    const color = row.color || colors[i % colors.length];
+    paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z" fill="${color}" opacity=".85"/>`;
+    legs += `<div class="leg-item"><span class="leg-dot" style="background:${color}"></span><span class="leg-name">${row.code}</span><span class="leg-pct">${pct.toFixed(1)}%</span></div>`;
+    startAngle = endAngle;
+  });
+
+  const costWan = (total / 10000).toFixed(1);
+  svg.innerHTML = paths +
+    `<circle cx="${cx}" cy="${cy}" r="32" fill="#161b22"/>` +
+    `<text x="${cx}" y="${cy-4}" text-anchor="middle" fill="#8b949e" font-size="9">总投入</text>` +
+    `<text x="${cx}" y="${cy+12}" text-anchor="middle" fill="#58a6ff" font-size="11" font-weight="bold">¥${costWan}万</text>`;
+  legend.innerHTML = legs;
+}
+
+/* ============ COUNTDOWN ============ */
+let cd = 300;
+let refreshTimer = null;
+let countdownTimer = null;
+
+function isMarketOpen() {
+  const now = new Date();
+  const d = now.getDay();
+  if (d === 0 || d === 6) return false;
+  const h = now.getHours(), m = now.getMinutes();
+  const t = h * 100 + m;
+  return t >= 930 && t < 1500;
+}
+
+function resetCountdown() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
+  if (!isMarketOpen()) {
+    document.getElementById('countdown').textContent = '已收盘';
+    return;
+  }
+  cd = refreshInterval;
+  refreshTimer = setInterval(fetchAllFunds, refreshInterval * 1000);
+  countdownTimer = setInterval(() => {
+    cd--;
+    const m = String(Math.floor(cd / 60)).padStart(2, '0');
+    const s = String(cd % 60).padStart(2, '0');
+    document.getElementById('countdown').textContent = `${m}:${s} 后自动刷新`;
+    // re-check market close during countdown
+    if (cd % 30 === 0 && !isMarketOpen()) resetCountdown();
+    if (cd <= 0) cd = refreshInterval;
+  }, 1000);
+}
+
+/* ============ COLUMN VISIBILITY ============ */
+const COL_VIS_LS = 'fm_col_vis';
+
+function applyColVis() {
+  document.querySelectorAll('#colPanel input').forEach(cb => {
+    const col = parseInt(cb.dataset.col);
+    const hidden = !cb.checked;
+    document.querySelectorAll(`#fundTable [data-col="${col}"]`).forEach(el => {
+      el.style.display = hidden ? 'none' : '';
+    });
+  });
+}
+
+function initColVisibility() {
+  const panel = document.getElementById('colPanel');
+  const btn = document.getElementById('colToggleBtn');
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    panel.classList.toggle('show');
+  });
+
+  panel.querySelectorAll('input').forEach(cb => {
+    cb.addEventListener('change', () => {
+      applyColVis();
+      saveColVis();
+    });
+  });
+
+  document.addEventListener('click', e => {
+    if (panel.classList.contains('show') && !panel.contains(e.target) && e.target !== btn) {
+      panel.classList.remove('show');
+    }
+  });
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(COL_VIS_LS));
+    if (saved) {
+      panel.querySelectorAll('input').forEach(cb => {
+        const col = parseInt(cb.dataset.col);
+        if (saved[col] === false) cb.checked = false;
+      });
+    }
+  } catch(e) {}
+  applyColVis();
+}
+
+function saveColVis() {
+  const state = {};
+  document.querySelectorAll('#colPanel input').forEach(cb => {
+    state[parseInt(cb.dataset.col)] = cb.checked;
+  });
+  localStorage.setItem(COL_VIS_LS, JSON.stringify(state));
+}
+
+/* ============ COLUMN RESIZE ============ */
+const COL_W_LS = 'fm_col_widths';
+let resizeState = null;
+
+function loadColWidths() {
+  try {
+    const w = JSON.parse(localStorage.getItem(COL_W_LS));
+    if (w) {
+      document.querySelectorAll('#tableCard th').forEach((th, i) => {
+        if (w[i]) { th.style.width = w[i] + 'px'; th.style.minWidth = w[i] + 'px'; }
+      });
+    }
+  } catch(e) {}
+}
+
+function saveColWidths() {
+  const w = {};
+  document.querySelectorAll('#tableCard th').forEach((th, i) => { w[i] = th.offsetWidth; });
+  localStorage.setItem(COL_W_LS, JSON.stringify(w));
+}
+
+function initColumnResize() {
+  document.querySelectorAll('#tableCard th').forEach(th => {
+    if (th.querySelector('.resize-handle')) return;
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle';
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const idx = Array.from(th.parentElement.children).indexOf(th);
+      resizeState = { idx, startX: e.clientX, startW: th.offsetWidth };
+      document.body.style.cursor = 'col-resize';
+      handle.classList.add('active');
+    });
+    th.appendChild(handle);
+  });
+  loadColWidths();
+}
+
+document.addEventListener('mousemove', e => {
+  if (!resizeState) return;
+  const ths = document.querySelectorAll('#tableCard th');
+  const th = ths[resizeState.idx];
+  const w = Math.max(40, resizeState.startW + (e.clientX - resizeState.startX));
+  th.style.width = w + 'px';
+  th.style.minWidth = w + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (!resizeState) return;
+  document.body.style.cursor = '';
+  document.querySelectorAll('.resize-handle.active').forEach(h => h.classList.remove('active'));
+  saveColWidths();
+  resizeState = null;
+});
+
+/* ============ EXPORT / IMPORT CONFIG ============ */
+function exportConfig() {
+  const data = JSON.stringify({ groups, funds }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'funds.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('配置文件已导出');
+}
+function importConfig(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const cfg = JSON.parse(ev.target.result);
+      if (cfg.groups) { groups = cfg.groups; saveGroups(groups); }
+      if (cfg.funds) {
+        cfg.funds.forEach(f => { if (!f.addTime) f.addTime = new Date().toISOString().split('T')[0]; if (!f.records) f.records = []; if (!f.shares) f.shares = 0; });
+        funds = cfg.funds; saveFunds(funds);
+      }
+      renderGroupTabs();
+      render();
+      showToast('配置文件已导入');
+    } catch(err) { showToast('导入失败：配置文件格式错误', true); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+/* ============ AUTO INIT ============ */
+document.querySelectorAll('script[id^="jsonp_script_"]').forEach(s => s.remove());
+
+(async function init() {
+  const savedTheme = localStorage.getItem('fm_theme') || 'dark';
+  switchTheme(savedTheme);
+  // load config from server API
+  try {
+    const res = await fetch('/api/config');
+    if (res.ok) {
+      const cfg = await res.json();
+      if (cfg.refreshInterval && cfg.refreshInterval >= 60) {
+        refreshInterval = cfg.refreshInterval;
+        localStorage.setItem('fm_refresh_interval', refreshInterval);
+      }
+      if (cfg.groups) { groups = cfg.groups; saveGroups(groups); }
+      if (cfg.funds && cfg.funds.length > 0) {
+        cfg.funds.forEach(f => { if (!f.records) f.records = []; if (!f.shares) f.shares = 0; if (!f.todayBuy) f.todayBuy = 0; });
+        funds = cfg.funds; saveFunds(funds);
+      }
+    }
+  } catch(e) {
+    // server offline — fall back to localStorage
+    const lsRI = localStorage.getItem('fm_refresh_interval');
+    if (lsRI) refreshInterval = parseInt(lsRI);
+    const ls = loadFunds();
+    if (ls && ls.length > 0) funds = ls;
+    const lg = loadGroups();
+    if (lg && lg.length > 0) groups = lg;
+  }
+  if (!groups.some(g => g.watchlist)) {
+    groups.push({ id: 'watchlist', name: '自选', color: '#9e9e9e', watchlist: true });
+    saveGroups(groups);
+  }
+  renderGroupTabs();
+  render();
+  initColumnResize();
+  initColVisibility();
+  if (funds.length > 0) {
+    fetchAllFunds();
+  }
+  resetCountdown();
+  if (funds.length === 0) {
+    document.getElementById('countdown').textContent = '请先添加基金或编辑 funds.json';
+  }
+})();
+
+document.getElementById('addFundBtn').addEventListener('click', function() {
+  document.getElementById('fundCode').readOnly = false;
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAllModals();
+  if (e.key === 'Enter') {
+    const fm = document.getElementById('fundModal');
+    const gm = document.getElementById('groupModal');
+    if (fm.classList.contains('show')) saveFund();
+    else if (gm.classList.contains('show')) saveGroup();
+  }
+});
+</script>
+</body>
+</html>
