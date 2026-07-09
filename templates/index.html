@@ -304,9 +304,10 @@ tr:hover td{background:var(--hover)}
     <label>目标分组</label>
     <select id="buyGroupSelect"></select>
     <label>买入金额（元）</label>
-    <input id="buyCost" type="number" min="0" step="0.01" placeholder="总投入金额">
-    <label>持有份额</label>
-    <input id="buyShares" type="number" min="0" step="0.01" placeholder="买入份额">
+    <input id="buyCost" type="number" min="0" step="0.01" placeholder="买入金额，如 500">
+    <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="buyCalcInfo"></div>
+    <label>买入单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
+    <input id="buyPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
     <div class="btns">
       <button class="cancel" onclick="closeModal('buyModal')">取消</button>
       <button class="ok" onclick="confirmBuy()">确认买进</button>
@@ -331,8 +332,9 @@ tr:hover td{background:var(--hover)}
   <div class="modal">
     <h3 id="addPosTitle">加仓</h3>
     <div id="addPosInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
-    <label>加仓份额</label>
-    <input id="addPosShares" type="number" min="0" step="0.01" placeholder="本次加仓份额">
+    <label>加仓金额（元）</label>
+    <input id="addPosAmount" type="number" min="0" step="0.01" placeholder="本次加仓金额，如 500">
+    <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="addPosCalcInfo"></div>
     <label>加仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
     <input id="addPosPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
     <div class="btns">
@@ -399,10 +401,31 @@ function buyFund(code) {
   buyTargetCode = code;
   const f = funds.find(x => x.code === code);
   if (!f) return;
+  const d = fetched[code];
   document.getElementById('buyModalTitle').textContent = '买进 ' + f.name;
-  document.getElementById('buyFundInfo').textContent = '当前：自选观察中 | 代码：' + f.code;
+  document.getElementById('buyFundInfo').textContent = '当前：自选观察中 | 代码：' + f.code + (d ? ' | 实时估值：¥' + d.gsz : '');
   document.getElementById('buyCost').value = '';
-  document.getElementById('buyShares').value = '';
+  document.getElementById('buyPrice').value = '';
+  document.getElementById('buyCalcInfo').textContent = '';
+  const calcInfo = document.getElementById('buyCalcInfo');
+  document.getElementById('buyCost').oninput = function() {
+    const amt = parseFloat(this.value);
+    const price = parseFloat(document.getElementById('buyPrice').value) || (d ? parseFloat(d.gsz) : 0);
+    if (amt > 0 && price > 0) {
+      calcInfo.textContent = `≈ ${(amt / price).toFixed(2)} 份`;
+    } else {
+      calcInfo.textContent = '';
+    }
+  };
+  document.getElementById('buyPrice').oninput = function() {
+    const price = parseFloat(this.value);
+    const amt = parseFloat(document.getElementById('buyCost').value);
+    if (amt > 0 && price > 0) {
+      calcInfo.textContent = `≈ ${(amt / price).toFixed(2)} 份`;
+    } else {
+      calcInfo.textContent = '';
+    }
+  };
   const sel = document.getElementById('buyGroupSelect');
   sel.innerHTML = '<option value="">请选择分组…</option>';
   groups.forEach(g => {
@@ -416,20 +439,33 @@ function confirmBuy() {
   if (!f) return;
   const groupId = document.getElementById('buyGroupSelect').value;
   const cost = parseFloat(document.getElementById('buyCost').value);
-  const sharesInput = document.getElementById('buyShares').value;
+  let price = parseFloat(document.getElementById('buyPrice').value);
   if (!groupId) { showToast('请选择目标分组', true); return; }
   if (isNaN(cost) || cost <= 0) { showToast('请输入买入金额', true); return; }
-  const finalShares = sharesInput.trim() !== '' ? parseFloat(sharesInput) : 0;
-  if (finalShares <= 0) { showToast('请填写持有份额', true); return; }
+  if (isNaN(price) || price <= 0) {
+    const d = fetched[buyTargetCode];
+    if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
+    price = parseFloat(d.gsz);
+  }
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const isAfterMarket = now.getHours() >= 15;
   f.groupId = groupId;
-  f.cost = cost / finalShares;
-  f.shares = finalShares;
+  if (isAfterMarket) {
+    f.cost = price;
+    f.shares = cost / price;
+  } else {
+    f.cost = price;
+    f.shares = cost / price;
+    f.todayBuy = (f.todayBuy || 0) + cost;
+  }
+  if (!f.addTime) f.addTime = todayStr;
   (async () => {
     await saveFunds(funds);
     closeModal('buyModal');
     if (fetched[f.code]) { await refreshOne(f.code); }
     render();
-    showToast('已买进 ' + f.name);
+    showToast(isAfterMarket ? `${f.name} ¥${cost.toFixed(2)} 已按收盘价买入` : `${f.name} ¥${cost.toFixed(2)} 盘中临时记录，刷新后修正`);
   })();
 }
 function refreshOne(code) {
@@ -450,32 +486,55 @@ function addPosition(code) {
   document.getElementById('addPosTitle').textContent = '加仓 ' + f.name;
   const posInfo = f.shares > 0 ? `单价 ¥${f.cost}，${f.shares}份，总投入 ¥${(f.cost*f.shares).toFixed(2)}` : '暂无持仓';
   document.getElementById('addPosInfo').textContent = `${posInfo} | 当前估值：${curPrice}`;
-  document.getElementById('addPosShares').value = '';
+  document.getElementById('addPosAmount').value = '';
   document.getElementById('addPosPrice').value = '';
+  document.getElementById('addPosCalcInfo').textContent = '';
+  const calcInfo = document.getElementById('addPosCalcInfo');
+  document.getElementById('addPosAmount').oninput = function() {
+    const amt = parseFloat(this.value);
+    const price = parseFloat(document.getElementById('addPosPrice').value) || (d ? parseFloat(d.gsz) : 0);
+    if (amt > 0 && price > 0) {
+      calcInfo.textContent = `≈ ${(amt / price).toFixed(2)} 份`;
+    } else {
+      calcInfo.textContent = '';
+    }
+  };
+  document.getElementById('addPosPrice').oninput = function() {
+    const price = parseFloat(this.value);
+    const amt = parseFloat(document.getElementById('addPosAmount').value);
+    if (amt > 0 && price > 0) {
+      calcInfo.textContent = `≈ ${(amt / price).toFixed(2)} 份`;
+    } else {
+      calcInfo.textContent = '';
+    }
+  };
   showModal('addPosModal');
 }
 
 function confirmAddPosition() {
   const f = funds.find(x => x.code === addPosCode);
   if (!f) return;
-  const addShares = parseFloat(document.getElementById('addPosShares').value);
+  const addAmount = parseFloat(document.getElementById('addPosAmount').value);
   let addPrice = parseFloat(document.getElementById('addPosPrice').value);
-  if (isNaN(addShares) || addShares <= 0) { showToast('请输入加仓份额', true); return; }
+  if (isNaN(addAmount) || addAmount <= 0) { showToast('请输入加仓金额', true); return; }
   if (isNaN(addPrice) || addPrice <= 0) {
     const d = fetched[addPosCode];
     if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
     addPrice = parseFloat(d.gsz);
   }
+  const now = new Date();
+  const isAfterMarket = now.getHours() >= 15;
+  const addShares = addAmount / addPrice;
   const oldTotal = (f.cost || 0) * (f.shares || 0);
-  const newTotal = addShares * addPrice;
   f.shares = (f.shares || 0) + addShares;
-  f.cost = (oldTotal + newTotal) / f.shares;
+  f.cost = (oldTotal + addAmount) / f.shares;
+  if (!isAfterMarket) f.todayBuy = (f.todayBuy || 0) + addAmount;
   (async () => {
     await saveFunds(funds);
     closeModal('addPosModal');
     await refreshOne(addPosCode);
     render();
-    showToast(`加仓完成：+${addShares}份，追加 ¥${newTotal.toFixed(2)}`);
+    showToast(isAfterMarket ? `加仓 ¥${addAmount.toFixed(2)} 已按收盘价计算` : `加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
   })();
 }
 
@@ -945,7 +1004,20 @@ async function fetchAllFunds() {
         const { gsz, dwjz, gztime, pct, periods, has_data, has_pos, total_paid, cur_val, profit, today_profit, ...rest } = f;
         return rest;
       });
-      saveFunds(funds);
+      // Recalculate todayBuy funds with latest price
+      let changed = false;
+      funds.forEach(f => {
+        if (f.todayBuy > 0 && newFetched[f.code]) {
+          const p = parseFloat(newFetched[f.code].gsz);
+          if (p > 0) {
+            f.cost = p;
+            f.shares = f.todayBuy / p;
+            f.todayBuy = 0;
+            changed = true;
+          }
+        }
+      });
+      if (changed) saveFunds(funds);
     }
 
     render();
@@ -1263,19 +1335,13 @@ function isMarketOpen() {
 function resetCountdown() {
   if (refreshTimer) clearInterval(refreshTimer);
   if (countdownTimer) clearInterval(countdownTimer);
-  if (!isMarketOpen()) {
-    document.getElementById('countdown').textContent = '已收盘';
-    return;
-  }
   cd = refreshInterval;
   refreshTimer = setInterval(fetchAllFunds, refreshInterval * 1000);
   countdownTimer = setInterval(() => {
     cd--;
     const m = String(Math.floor(cd / 60)).padStart(2, '0');
     const s = String(cd % 60).padStart(2, '0');
-    document.getElementById('countdown').textContent = `${m}:${s} 后自动刷新`;
-    // re-check market close during countdown
-    if (cd % 30 === 0 && !isMarketOpen()) resetCountdown();
+    document.getElementById('countdown').textContent = isMarketOpen() ? `${m}:${s} 后自动刷新` : `${m}:${s} 盘后自动刷新`;
     if (cd <= 0) cd = refreshInterval;
   }, 1000);
 }
