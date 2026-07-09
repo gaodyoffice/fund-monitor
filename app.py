@@ -259,4 +259,4 @@ def api_refresh():
 if __name__ == '__main__':
     print('→ http://localhost:5000')
     print('→ http://<your-lan-ip>:5000  (手机浏览器访问)')
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

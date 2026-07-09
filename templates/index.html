@@ -499,18 +499,19 @@ function confirmDelete() {
 
 /* ============ GROUP CRUD ============ */
 function getGroupProfit(gid) {
-  let profit = 0, cost = 0;
+  let profit = 0, cost = 0, hasLive = false;
   funds.forEach(f => {
     if (f.groupId !== gid || !f.shares || f.shares <= 0) return;
     const d = fetched[f.code];
     if (!d) return;
+    hasLive = true;
     const gsz = parseFloat(d.gsz) || 0;
     const totalPaid = f.shares * f.cost;
     const curVal = f.shares * gsz;
     profit += curVal - totalPaid;
     cost += totalPaid;
   });
-  return { profit, cost };
+  return { profit, cost, hasLive };
 }
 
 function renderGroupTabs() {
@@ -528,8 +529,8 @@ function renderGroupTabs() {
     if (g.id === 'watchlist') return;
     const active = curGroup === g.id ? 'active' : '';
     const gp = getGroupProfit(g.id);
-    const pStr = gp.profit !== 0 ? ((gp.profit>0?'+':'') + '¥' + Math.round(gp.profit).toLocaleString()) : '';
-    const pClr = gp.profit > 0 ? '#ff4d4f' : (gp.profit < 0 ? '#3fb950' : '');
+    const pStr = gp.hasLive ? ((gp.profit>0?'+':'') + '¥' + Math.round(gp.profit).toLocaleString()) : '';
+    const pClr = gp.profit >= 0 ? '#ff4d4f' : '#3fb950';
     html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
       <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle;flex-shrink:0"></span>
       <span>${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
