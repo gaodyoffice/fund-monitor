@@ -532,7 +532,7 @@ function renderGroupTabs() {
     const pClr = gp.profit > 0 ? '#ff4d4f' : (gp.profit < 0 ? '#3fb950' : '');
     html += `<button class="grp-tab ${active}" data-group-id="${g.id}" draggable="true" onclick="switchGroup('${g.id}')" style="--dot-color:${g.color}">
       <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--dot-color);margin-right:4px;vertical-align:middle;flex-shrink:0"></span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px;display:inline-block;vertical-align:middle">${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
+      <span>${g.name}</span>${pStr ? `<span style="color:${pClr};font-size:.68rem;flex-shrink:0">${pStr}</span>` : ''}
       <span class="grp-edit-btn" onclick="event.stopPropagation();showEditGroup('${g.id}')" title="编辑分组">✎</span>
       <span class="del" onclick="event.stopPropagation();deleteGroup('${g.id}')" title="删除分组">×</span>
     </button>`;
@@ -903,12 +903,14 @@ async function fetchAllFunds() {
     if (!resp.ok) throw new Error('Refresh failed');
     const data = await resp.json();
 
-    fetched = {};
-    periodsCache = {};
+    const newFetched = {};
+    const newPeriods = {};
     (data.funds || []).forEach(f => {
-      fetched[f.code] = { gsz: f.gsz, dwjz: f.dwjz, name: f.name, gztime: f.gztime };
-      periodsCache[f.code] = f.periods || {};
+      newFetched[f.code] = { gsz: f.gsz, dwjz: f.dwjz, name: f.name, gztime: f.gztime };
+      newPeriods[f.code] = f.periods || {};
     });
+    fetched = newFetched;
+    periodsCache = newPeriods;
     summaryData = data.summary;
     groupsProfit = data.groups_profit || {};
 
