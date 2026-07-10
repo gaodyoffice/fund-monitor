@@ -101,6 +101,28 @@ def fetch_official_nav(code):
     return None
 
 
+def fetch_nav_by_date(code, target_date):
+    """获取指定日期的官方净值"""
+    try:
+        r = requests.get(
+            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=90',
+            headers={'Referer': 'https://fund.eastmoney.com/'},
+            timeout=FETCH_TIMEOUT,
+        )
+        text = r.text.strip()
+        m = re.match(r'^jquery\((.*)\);?\s*$', text, re.IGNORECASE)
+        if m:
+            text = m.group(1)
+        data = json.loads(text)
+        if data.get('Data') and data['Data'].get('LSJZList'):
+            for record in data['Data']['LSJZList']:
+                if record.get('FSRQ') == target_date:
+                    return float(record['DWJZ'])
+    except Exception:
+        pass
+    return None
+
+
 # ── 计算层 ──
 
 def calc_periods(records):
@@ -300,6 +322,18 @@ def api_save():
     current['funds'] = data.get('funds', current.get('funds', []))
     write_config(current)
     return {'ok': True}
+
+@app.route('/api/nav-by-date', methods=['POST'])
+def api_nav_by_date():
+    data = request.get_json(force=True)
+    code = data.get('code', '')
+    date_str = data.get('date', '')
+    if not code or not date_str:
+        return {'ok': False}, 400
+    nav = fetch_nav_by_date(code, date_str)
+    if nav is None:
+        return {'ok': False, 'nav': None}
+    return {'ok': True, 'nav': nav}
 
 @app.route('/api/fetch-one', methods=['POST'])
 def api_fetch_one():

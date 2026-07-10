@@ -270,13 +270,15 @@ tr:hover td{background:var(--hover)}
     <select id="fundGroupSelect"></select>
     <label>基金代码</label>
     <input id="fundCode" placeholder="6位基金代码，如 008702" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
-    <label>今日买进金额（元）<span style="color:#484f58;font-weight:normal">（选填，判定买进价格）</span></label>
+    <label>今日买进金额（元）<span style="color:#484f58;font-weight:normal">（选填）</span></label>
     <input id="fundTodayBuy" type="number" min="0" step="0.01" placeholder="今日买入金额">
-    <label>持仓成本（元）<span style="color:#484f58;font-weight:normal">（选填，单价）</span></label>
+    <label>买进日期<span style="color:#484f58;font-weight:normal">（选填，按当日净值定单价）</span></label>
+    <input id="fundBuyDate" type="date">
+    <label>持仓成本（元）<span style="color:#484f58;font-weight:normal">（选填，覆盖日期净值）</span></label>
     <input id="fundCost" type="number" min="0" step="0.0001" placeholder="买入单价">
-    <label>持有份额 <span style="color:#484f58;font-weight:normal">（选填）</span></label>
+    <label>持有份额 <span style="color:#484f58;font-weight:normal">（选填，覆盖自动计算）</span></label>
     <input id="fundShares" type="number" min="0" step="0.01" placeholder="持有份额">
-    <div class="hint" id="fundNameHint">不填持仓信息则只观察。今日买进金额自动按实时估值计算份额。</div>
+    <div class="hint" id="fundNameHint">填买进日期则按当日官方净值定价；填持仓成本可覆盖。不填任何持仓信息则只观察。</div>
     <div class="btns">
       <button class="cancel" onclick="closeModal('fundModal')">取消</button>
       <button class="ok" id="fundOkBtn" onclick="saveFund()">确认</button>
@@ -711,6 +713,7 @@ function showAddFund(groupId) {
   document.getElementById('fundCode').value = '';
   document.getElementById('fundCode').readOnly = false;
   document.getElementById('fundTodayBuy').value = '';
+  document.getElementById('fundBuyDate').value = '';
   document.getElementById('fundCost').value = '';
   document.getElementById('fundShares').value = '';
   document.getElementById('fundNameHint').textContent = '';
@@ -735,6 +738,7 @@ function showEditFund(code) {
   document.getElementById('fundCode').value = f.code;
   document.getElementById('fundCode').readOnly = true;
   document.getElementById('fundTodayBuy').value = '';
+  document.getElementById('fundBuyDate').value = '';
   document.getElementById('fundCost').value = f.cost;
   document.getElementById('fundShares').value = f.shares || '';
   const totalStr = (f.shares > 0 && f.cost > 0) ? `总投入 ¥${(f.cost * f.shares).toFixed(2)}` : '';
@@ -757,11 +761,25 @@ function calcBuyPrice(d) {
   return parseFloat(d.dwjz) || 0;
 }
 
+async function fetchNavByDate(code, dateStr) {
+  try {
+    const resp = await fetch('/api/nav-by-date', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code, date: dateStr})
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.ok && data.nav > 0 ? data.nav : null;
+  } catch { return null; }
+}
+
 function saveFund() {
   const code = document.getElementById('fundCode').value.trim();
   const cost = parseFloat(document.getElementById('fundCost').value);
   const sharesInput = document.getElementById('fundShares').value;
   const todayBuyInput = document.getElementById('fundTodayBuy').value;
+  const buyDate = document.getElementById('fundBuyDate').value;
   const groupId = document.getElementById('fundGroupSelect').value;
 
   if (!code || code.length !== 6) { showToast('请输入6位基金代码', true); return; }
@@ -813,11 +831,23 @@ function saveFund() {
       const name = d.name;
       let autoCost = finalCost;
       let autoShares = finalShares;
-      if (finalTodayBuy > 0 && autoCost === 0 && autoShares === 0) {
+
+      // Priority 1: 手动持仓成本 → 已赋值 autoCost
+      // Priority 2: 买进日期 → 获取当日官方净值作为单价
+      if (autoCost === 0 && buyDate) {
+        const nav = await fetchNavByDate(code, buyDate);
+        if (nav) {
+          autoCost = nav;
+          if (finalTodayBuy > 0) autoShares = finalTodayBuy / nav;
+        }
+      }
+      // Priority 3: 今日买进金额 → 用实时估值
+      if (autoCost === 0 && autoShares === 0 && finalTodayBuy > 0) {
         const price = calcBuyPrice(d);
         if (price > 0) { autoCost = price; autoShares = finalTodayBuy / price; }
       }
-      const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, addTime: new Date().toISOString().split('T')[0], records: [] };
+
+      const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, buyDate: buyDate || undefined, addTime: new Date().toISOString().split('T')[0], records: [] };
       funds.push(newFund);
       if (!computedData) {
         computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
