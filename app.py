@@ -76,9 +76,10 @@ def fetch_one(code):
 
 
 def fetch_official_nav(code):
+    """取最近两期官方净值，返回 {today, date, yesterday} 或 None"""
     try:
         r = requests.get(
-            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=1',
+            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=2',
             headers={'Referer': 'https://fund.eastmoney.com/'},
             timeout=FETCH_TIMEOUT,
         )
@@ -88,10 +89,13 @@ def fetch_official_nav(code):
             text = m.group(1)
         data = json.loads(text)
         if data.get('Data') and data['Data'].get('LSJZList'):
-            nav = data['Data']['LSJZList'][0]
-            dwjz = float(nav['DWJZ'])
-            if dwjz > 0 and nav.get('FSRQ') == date.today().isoformat():
-                return dwjz
+            records = data['Data']['LSJZList']
+            if records:
+                r0 = records[0]
+                result = {'today': float(r0['DWJZ']), 'date': r0.get('FSRQ', ''), 'yesterday': None}
+                if len(records) > 1:
+                    result['yesterday'] = float(records[1]['DWJZ'])
+                return result
     except Exception:
         pass
     return None
@@ -154,7 +158,7 @@ def compute_funds(funds, live, groups, cur_group='all'):
 
     # ── 逐行计算 ──
     rows = []
-    total_cost = total_value = total_profit = total_today = 0.0
+    total_cost = total_value = total_profit = total_today = total_yesterday = 0.0
 
     for f in fund_rows:
         code = f['code']
@@ -189,6 +193,7 @@ def compute_funds(funds, live, groups, cur_group='all'):
             cur_val = round(shares * gsz, 2)
             profit = round(cur_val - total_paid, 2)
             today_profit = round(shares * (gsz - dwjz), 2) if dwjz > 0 else 0.0
+            row['yesterdayProfit'] = f.get('yesterdayProfit', 0.0) or 0.0
             row['totalPaid'] = total_paid
             row['curVal'] = cur_val
             row['profit'] = profit
@@ -197,11 +202,13 @@ def compute_funds(funds, live, groups, cur_group='all'):
             total_value += cur_val
             total_profit += profit
             total_today += today_profit
+            total_yesterday += row['yesterdayProfit']
         else:
             row['totalPaid'] = 0.0
             row['curVal'] = 0.0
             row['profit'] = 0.0
             row['todayProfit'] = 0.0
+            row['yesterdayProfit'] = 0.0
 
         rows.append(row)
 
@@ -265,6 +272,7 @@ def compute_funds(funds, live, groups, cur_group='all'):
             'totalValue': round(total_value, 2),
             'totalProfit': round(total_profit, 2),
             'totalToday': round(total_today, 2),
+            'totalYesterday': round(total_yesterday, 2),
             'totalPct': round(total_profit / total_cost * 100, 2) if total_cost > 0 else 0.0,
         },
         'groupsProfit': groups_profit_rounded,
@@ -328,6 +336,8 @@ def api_compute():
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
     """抓取实时数据 → 修正 todayBuy → 积累 records → 全量计算"""
+    data = request.get_json(silent=True)
+    cur_group = data.get('curGroup', 'all') if data else 'all'
     config = read_config()
     funds = config.get('funds', [])
     groups = config.get('groups', [])
@@ -336,7 +346,7 @@ def api_refresh():
             'funds': [], 'fetched': {}, 'groups': groups,
             'rows': [], 'summary': {
                 'totalCost': 0, 'totalValue': 0,
-                'totalProfit': 0, 'totalToday': 0, 'totalPct': 0,
+                'totalProfit': 0, 'totalToday': 0, 'totalYesterday': 0, 'totalPct': 0,
             },
             'groupsProfit': {}, 'groupBreakdown': [],
         }
@@ -354,28 +364,49 @@ def api_refresh():
             except Exception:
                 live[code] = None
 
-    # 尝试用官方净值替代 gsz（仅当日期匹配 today 才生效）
+    # 独立获取 eastmoney 历史净值，用于计算昨日盈亏（不限时间）
     codes_to_fix = [f['code'] for f in funds if live.get(f['code'])]
     with ThreadPoolExecutor(max_workers=10) as pool:
         nav_future = {pool.submit(fetch_official_nav, code): code for code in set(codes_to_fix)}
+        nav_results = {}
         for fut in as_completed(nav_future):
             code = nav_future[fut]
             try:
-                nav = fut.result()
-                if nav and nav > 0 and live.get(code):
-                    live[code]['gsz'] = nav
+                result = fut.result()
+                if result and result['today'] > 0:
+                    nav_results[code] = result
             except Exception:
                 pass
 
-    # 修正 todayBuy: 用最新 gsz 重算份额
+    # 昨日盈亏 = 份额 × (最新净值 - 昨日净值)
+    for f in funds:
+        nr = nav_results.get(f['code'])
+        if not nr or not nr.get('yesterday'):
+            continue
+        s = f.get('shares', 0) or 0
+        if s > 0 and nr['yesterday'] > 0:
+            f['yesterdayProfit'] = round(s * (live[f['code']]['dwjz'] - nr['yesterday']), 2)
+
+    # 二次校正：盘后用 eastmoney 今日净值替换 gsz（盘中跳过以节省时间）
+    if datetime.now().hour >= 15:
+        for code, nr in nav_results.items():
+            if nr['date'] == today and live.get(code):
+                live[code]['gsz'] = nr['today']
+                if nr['yesterday']:
+                    live[code]['dwjz'] = nr['yesterday']
+
+    # 修正 todayBuy: 用最新 gsz 合并到现有持仓
     changed = False
     for f in funds:
         tb = f.get('todayBuy', 0)
         if tb > 0 and live.get(f['code']):
             price = live[f['code']]['gsz']
             if price > 0:
-                f['cost'] = price
-                f['shares'] = round(tb / price, 6)
+                add_shares = round(tb / price, 6)
+                old_total = f.get('cost', 0) * f.get('shares', 0)
+                f['shares'] = round((f.get('shares', 0) or 0) + add_shares, 6)
+                if f['shares'] > 0:
+                    f['cost'] = round((old_total + tb) / f['shares'], 6)
                 f['todayBuy'] = 0
                 changed = True
 
@@ -389,9 +420,12 @@ def api_refresh():
         if not any(r['d'] == today for r in f['records']):
             gsz, dwjz = d.get('gsz'), d.get('dwjz')
             if gsz and dwjz and dwjz > 0:
+                shares = f.get('shares', 0) or 0
                 f['records'].append({
                     'd': today,
                     'v': round((gsz - dwjz) / dwjz * 100, 4),
+                    'p': round(shares * (gsz - dwjz), 2) if shares > 0 else 0.0,
+                    'dwjz': dwjz,
                 })
 
     write_config(config)
@@ -407,10 +441,26 @@ def api_refresh():
                 'gztime': d['gztime'],
             }
 
-    result = compute_funds(funds, live, groups, 'all')
+    result = compute_funds(funds, live, groups, cur_group)
     result['funds'] = funds
     result['fetched'] = fetched
     result['groups'] = groups
+
+    # ── 调试日志 ──
+    print('\n=== DEBUG: api_refresh ===')
+    for f in funds:
+        d = live.get(f['code'])
+        gsz = d['gsz'] if d else '—'
+        dwjz = d['dwjz'] if d else '—'
+        name = d['name'] if d else f.get('name', '')
+        shares = f.get('shares', 0) or 0
+        cost = f.get('cost', 0) or 0
+        row_today = next((r.get('todayProfit', 0) for r in result['rows'] if r['code'] == f['code']), 0)
+        row_yesterday = next((r.get('yesterdayProfit', 0) for r in result['rows'] if r['code'] == f['code']), 0)
+        print(f"  {f['code']} {name[:16]:16s}  shares={shares:>8.2f}  cost={cost:>7.4f}  "
+              f"gsz={gsz}  dwjz={dwjz}  todayProfit={row_today:>8.2f}  yesterdayProfit={row_yesterday:>8.2f}")
+    print('=== END DEBUG ===\n')
+
     return result
 
 

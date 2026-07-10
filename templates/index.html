@@ -59,7 +59,7 @@ body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;backgr
 .card-title{font-size:.72rem;color:var(--text2);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
 
 /* Summary Grid */
-.sum-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.sum-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
 .sum-item{text-align:center;padding:10px 4px;background:var(--elevated);border-radius:8px}
 .sum-item .sv{font-size:1.1rem;font-weight:700}
 .sum-item .sl{font-size:.68rem;color:var(--text2);margin-top:3px}
@@ -187,8 +187,9 @@ tr:hover td{background:var(--hover)}
     <div class="sum-item"><div class="sv" id="totalCost" style="color:#58a6ff">—</div><div class="sl">持仓成本</div></div>
     <div class="sum-item"><div class="sv" id="totalValue" style="color:#58a6ff">—</div><div class="sl">估算市值</div></div>
     <div class="sum-item"><div class="sv" id="totalProfit">—</div><div class="sl">浮动盈亏</div></div>
-    <div class="sum-item"><div class="sv" id="totalTodayProfit">—</div><div class="sl">今日盈亏</div></div>
     <div class="sum-item"><div class="sv" id="totalPct">—</div><div class="sl">综合收益率</div></div>
+    <div class="sum-item"><div class="sv" id="totalTodayProfit">—</div><div class="sl">今日盈亏</div></div>
+    <div class="sum-item"><div class="sv" id="totalYesterdayProfit">—</div><div class="sl">昨日盈亏</div></div>
   </div>
   <div id="groupProfitBreakdown" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"></div>
 </div>
@@ -212,6 +213,7 @@ tr:hover td{background:var(--hover)}
       <label><input type="checkbox" checked data-col="10"> 年涨幅</label>
       <label><input type="checkbox" checked data-col="11"> 累计涨幅</label>
       <label><input type="checkbox" checked data-col="13"> 今日盈亏</label>
+      <label><input type="checkbox" checked data-col="18"> 昨日盈亏</label>
       <label><input type="checkbox" checked data-col="12"> 浮动盈亏</label>
       <label><input type="checkbox" checked data-col="17"> 持仓收益率</label>
       <label><input type="checkbox" checked data-col="14"> 估算市值</label>
@@ -232,6 +234,7 @@ tr:hover td{background:var(--hover)}
     <th data-col="10" class="sortable">年涨幅</th>
     <th data-col="11" class="sortable">累计涨幅</th>
     <th data-col="13" class="sortable">今日盈亏</th>
+    <th data-col="18" class="sortable">昨日盈亏</th>
     <th data-col="12" class="sortable">浮动盈亏</th>
     <th data-col="17" class="sortable">持仓收益率</th>
     <th data-col="14" class="sortable">估算市值</th>
@@ -437,25 +440,23 @@ async function confirmBuy() {
   if (!f) return;
   const groupId = document.getElementById('buyGroupSelect').value;
   const cost = parseFloat(document.getElementById('buyCost').value);
-  let price = parseFloat(document.getElementById('buyPrice').value);
   if (!groupId) { showToast('请选择目标分组', true); return; }
   if (isNaN(cost) || cost <= 0) { showToast('请输入买入金额', true); return; }
-  if (isNaN(price) || price <= 0) {
-    const d = await fetchOne(buyTargetCode);
-    if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
-    price = d.gsz;
-    if (computedData) computedData.fetched[buyTargetCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
-  }
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
   const isAfterMarket = now.getHours() >= 15;
   f.groupId = groupId;
   if (isAfterMarket) {
+    let price = parseFloat(document.getElementById('buyPrice').value);
+    if (isNaN(price) || price <= 0) {
+      const d = await fetchOne(buyTargetCode);
+      if (!d) { showToast('暂无数据，请手动输入单价', true); return; }
+      price = d.dwjz || d.gsz;
+      if (computedData) computedData.fetched[buyTargetCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+    }
     f.cost = price;
     f.shares = cost / price;
   } else {
-    f.cost = price;
-    f.shares = cost / price;
     f.todayBuy = (f.todayBuy || 0) + cost;
   }
   if (!f.addTime) f.addTime = todayStr;
@@ -512,21 +513,24 @@ async function confirmAddPosition() {
   const f = funds.find(x => x.code === addPosCode);
   if (!f) return;
   const addAmount = parseFloat(document.getElementById('addPosAmount').value);
-  let addPrice = parseFloat(document.getElementById('addPosPrice').value);
   if (isNaN(addAmount) || addAmount <= 0) { showToast('请输入加仓金额', true); return; }
-  if (isNaN(addPrice) || addPrice <= 0) {
-    const d = await fetchOne(addPosCode);
-    if (!d) { showToast('暂无实时估值，请手动输入单价', true); return; }
-    addPrice = d.gsz;
-    if (computedData) computedData.fetched[addPosCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
-  }
   const now = new Date();
   const isAfterMarket = now.getHours() >= 15;
-  const addShares = addAmount / addPrice;
-  const oldTotal = (f.cost || 0) * (f.shares || 0);
-  f.shares = (f.shares || 0) + addShares;
-  f.cost = (oldTotal + addAmount) / f.shares;
-  if (!isAfterMarket) f.todayBuy = (f.todayBuy || 0) + addAmount;
+  if (isAfterMarket) {
+    let addPrice = parseFloat(document.getElementById('addPosPrice').value);
+    if (isNaN(addPrice) || addPrice <= 0) {
+      const d = await fetchOne(addPosCode);
+      if (!d) { showToast('暂无数据，请手动输入单价', true); return; }
+      addPrice = d.dwjz || d.gsz;
+      if (computedData) computedData.fetched[addPosCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+    }
+    const addShares = addAmount / addPrice;
+    const oldTotal = (f.cost || 0) * (f.shares || 0);
+    f.shares = (f.shares || 0) + addShares;
+    f.cost = (oldTotal + addAmount) / f.shares;
+  } else {
+    f.todayBuy = (f.todayBuy || 0) + addAmount;
+  }
   await saveFunds(funds);
   closeModal('addPosModal');
   await computeAndRender();
@@ -887,9 +891,12 @@ async function fetchOne(code) {
 
 async function fetchAllFunds() {
   if (funds.length === 0) return;
-  showLoading(true);
   try {
-    const resp = await fetch('/api/refresh', { method: 'POST' });
+    const resp = await fetch('/api/refresh', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ curGroup: curGroup })
+    });
     if (!resp.ok) throw new Error('Refresh failed');
     const data = await resp.json();
 
@@ -907,7 +914,6 @@ async function fetchAllFunds() {
     }
     render();
   } finally {
-    showLoading(false);
   }
 }
 
@@ -933,7 +939,7 @@ function getSortKey(r, col) {
     const v = col === 5 ? r.pct : r.periods[{6:'w1',7:'w2',8:'m1',9:'m3',10:'y1',11:'sinceAdd'}[col]];
     return v !== null && v !== undefined && isFinite(v) ? v : -Infinity;
   }
-  const map = {1:'totalPaid',2:'shares',3:'dwjz',4:'gsz',12:'profit',13:'todayProfit',14:'curVal',16:'cost',17:'profitRate'};
+  const map = {1:'totalPaid',2:'shares',3:'dwjz',4:'gsz',12:'profit',13:'todayProfit',14:'curVal',16:'cost',17:'profitRate',18:'yesterdayProfit'};
   const key = map[col];
   if (col === 17) return r.totalPaid > 0 ? r.profit / r.totalPaid * 100 : -Infinity;
   return key ? (r[key] !== undefined && r[key] !== null ? r[key] : -Infinity) : 0;
@@ -1051,6 +1057,9 @@ function render() {
   document.getElementById('totalProfit').style.color = summary.totalCost > 0 ? (isUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
   document.getElementById('totalTodayProfit').textContent = summary.totalCost > 0 ? (todayUp?'+':'') + fmtY(summary.totalToday) : '—';
   document.getElementById('totalTodayProfit').style.color = summary.totalCost > 0 ? (todayUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
+  const yestUp = summary.totalYesterday >= 0;
+  document.getElementById('totalYesterdayProfit').textContent = summary.totalCost > 0 ? (yestUp?'+':'') + fmtY(summary.totalYesterday) : '—';
+  document.getElementById('totalYesterdayProfit').style.color = summary.totalCost > 0 ? (yestUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
   document.getElementById('totalPct').textContent = summary.totalCost > 0 ? (isUp?'+':'') + summary.totalPct.toFixed(2) + '%' : '—';
   document.getElementById('totalPct').style.color = summary.totalCost > 0 ? (isUp ? '#ff4d4f' : '#3fb950') : '#8b949e';
 
@@ -1084,6 +1093,7 @@ function render() {
     const rc = r.hasData ? (r.pct >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
     const pc = r.hasData ? (r.profit >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
     const tc = r.hasData ? (r.todayProfit >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
+    const yc = r.hasData ? (r.yesterdayProfit >= 0 ? '#ff4d4f' : '#3fb950') : 'var(--muted)';
     const periods = r.periods || {};
     const fmtPct = v => v !== null && v !== undefined && isFinite(v) ? (v>=0?'+':'') + v.toFixed(2) + '%' : '—';
     const pClr = v => v >= 0 ? '#ff4d4f' : (v < 0 ? '#3fb950' : 'var(--muted)');
@@ -1103,6 +1113,7 @@ function render() {
       <td data-col="10" class="r bold" style="color:${pClr(periods.y1)}">${fmtPct(periods.y1)}</td>
       <td data-col="11" class="r bold" style="color:${pClr(periods.sinceAdd)}">${fmtPct(periods.sinceAdd)}</td>
       <td data-col="13" class="r bold" style="color:${r.hasPos ? tc : 'var(--muted)'}">${r.hasPos ? (r.todayProfit>=0?'+':'') + fmtY(r.todayProfit) : '—'}</td>
+      <td data-col="18" class="r bold" style="color:${r.hasPos ? yc : 'var(--muted)'}">${r.hasPos ? (r.yesterdayProfit>=0?'+':'') + fmtY(r.yesterdayProfit) : '—'}</td>
       <td data-col="12" class="r bold" style="color:${r.hasPos ? pc : 'var(--muted)'}">${r.hasPos ? (r.profit>=0?'+':'') + fmtY(r.profit) : '—'}</td>
       <td data-col="17" class="r bold" style="color:${r.hasPos && r.totalPaid > 0 ? pc : 'var(--muted)'}">${r.hasPos && r.totalPaid > 0 ? (r.profit>=0?'+':'') + (r.profit / r.totalPaid * 100).toFixed(2) + '%' : '—'}</td>
       <td data-col="14" class="r num bold" style="color:${r.hasPos ? rc : 'var(--muted)'}">${r.hasPos ? fmtY(r.curVal) : '—'}</td>
