@@ -379,7 +379,7 @@ let curGroup = 'all';
 let computedData = null; // {rows, summary, groupsProfit, groupBreakdown, fetched, funds, groups}
 let refreshInterval = 300;
 let lastGroupId = localStorage.getItem('fm_last_group') || '';
-let editingFundCode = null;
+let editingFundCode = null, editingFundGroupId = null;
 
 /* ============ THEME ============ */
 function switchTheme(t) {
@@ -708,7 +708,7 @@ function deleteGroup(id) {
 
 /* ============ FUND CRUD ============ */
 function showAddFund(groupId) {
-  editingFundCode = null;
+  editingFundCode = null; editingFundGroupId = null;
   document.getElementById('fundModalTitle').textContent = '添加基金';
   document.getElementById('fundCode').value = '';
   document.getElementById('fundCode').readOnly = false;
@@ -730,10 +730,10 @@ function showAddFund(groupId) {
   showModal('fundModal');
 }
 
-function showEditFund(code) {
-  const f = funds.find(x => x.code === code);
+function showEditFund(code, gid) {
+  const f = gid ? funds.find(x => x.code === code && x.groupId === gid) : funds.find(x => x.code === code);
   if (!f) return;
-  editingFundCode = code;
+  editingFundCode = code; editingFundGroupId = gid || null;
   document.getElementById('fundModalTitle').textContent = '编辑基金';
   document.getElementById('fundCode').value = f.code;
   document.getElementById('fundCode').readOnly = true;
@@ -788,10 +788,14 @@ function saveFund() {
   const finalTodayBuy = todayBuyInput.trim() !== '' ? parseFloat(todayBuyInput) : 0;
 
   if (editingFundCode) {
-    const f = funds.find(x => x.code === editingFundCode);
+    const f = editingFundGroupId ? funds.find(x => x.code === editingFundCode && x.groupId === editingFundGroupId) : funds.find(x => x.code === editingFundCode);
     if (f) {
       f.groupId = groupId;
-      if (finalCost > 0 && finalShares > 0) { f.cost = finalCost; f.shares = finalShares; }
+      if (document.getElementById('fundCost').value.trim() === '' && document.getElementById('fundShares').value.trim() === '') {
+        f.cost = 0; f.shares = 0;
+      } else if (finalCost > 0 && finalShares > 0) {
+        f.cost = finalCost; f.shares = finalShares;
+      }
       if (finalTodayBuy > 0) {
         f.todayBuy = (f.todayBuy || 0) + finalTodayBuy;
         if (f.shares === 0) {
@@ -805,6 +809,7 @@ function saveFund() {
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
+      await refreshOne(editingFundCode);
       await computeAndRender();
       showToast('基金已更新');
     })();
@@ -862,6 +867,7 @@ function saveFund() {
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
+      await refreshOne(code);
       await computeAndRender();
       showToast(`基金 ${code} 已添加`);
     } catch {
@@ -1159,7 +1165,7 @@ function render() {
       <td data-col="15"><div class="fund-actions">
         ${curGroup === 'all' ? '<span style="color:var(--muted);font-size:.7rem">合并</span>' :
           (r.hasPos ? `<button onclick="addPosition('${r.code}')" title="加仓">➕</button>` : `<button onclick="buyFund('${r.code}')" title="买进">💰</button>`) +
-          `<button onclick="showEditFund('${r.code}')" title="编辑">✎</button>` +
+          `<button onclick="showEditFund('${r.code}','${r.groupId}')" title="编辑">✎</button>` +
           `<button class="del-btn" onclick="deleteFund('${r.code}','${r.groupId}')" title="删除">×</button>`
         }
       </div></td>
