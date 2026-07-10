@@ -851,6 +851,7 @@ function saveFund() {
       funds.push(newFund);
       if (!computedData) {
         computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+        _sortBackup = [];
       }
       computedData.fetched[code] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
       const today = new Date().toISOString().split('T')[0];
@@ -931,6 +932,7 @@ async function fetchAllFunds() {
     const data = await resp.json();
 
     computedData = data;
+    _sortBackup = data.rows ? data.rows.slice() : [];
     funds = data.funds || [];
     groups = data.groups || groups;
     localStorage.setItem(LS_FUNDS, JSON.stringify(funds));
@@ -941,6 +943,7 @@ async function fetchAllFunds() {
     showToast('刷新失败', true);
     if (!computedData) {
       computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+      _sortBackup = [];
     }
     render();
   } finally {
@@ -962,7 +965,7 @@ async function fetchAll() {
 let maxAbsPct = 10; // default
 
 /* ============ SORT ============ */
-let sortCol = null, sortDir = null;
+let sortCol = null, sortDir = null, _sortBackup = [];
 function getSortKey(r, col) {
   if (col === 0) return r.code;
   if (col === 5 || col === 6 || col === 7 || col === 8 || col === 9 || col === 10 || col === 11) {
@@ -1002,7 +1005,12 @@ function updateSortIndicators() {
   }
 }
 function sortRows(arr) {
-  if (sortCol === null || sortDir === null) return;
+  if (sortCol === null || sortDir === null) {
+    if (_sortBackup.length > 0) {
+      arr.splice(0, arr.length, ..._sortBackup);
+    }
+    return;
+  }
   arr.sort((a, b) => {
     const va = getSortKey(a, sortCol), vb = getSortKey(b, sortCol);
     if (va === -Infinity && vb === -Infinity) return 0;
@@ -1030,6 +1038,7 @@ async function computeAndRender() {
     });
     if (!resp.ok) return;
     computedData = await resp.json();
+    _sortBackup = computedData.rows ? computedData.rows.slice() : [];
     render();
   } catch(e) {
     console.error(e);
@@ -1436,6 +1445,7 @@ async function importConfig(e) {
   }
   // Initial computed data from local funds (no live data)
   computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+  _sortBackup = [];
   render();
   initColumnResize();
   initColVisibility();

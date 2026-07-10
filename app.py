@@ -479,22 +479,6 @@ def api_refresh():
     result['funds'] = funds
     result['fetched'] = fetched
     result['groups'] = groups
-
-    # ── 调试日志 ──
-    print('\n=== DEBUG: api_refresh ===')
-    for f in funds:
-        d = live.get(f['code'])
-        gsz = d['gsz'] if d else '—'
-        dwjz = d['dwjz'] if d else '—'
-        name = d['name'] if d else f.get('name', '')
-        shares = f.get('shares', 0) or 0
-        cost = f.get('cost', 0) or 0
-        row_today = next((r.get('todayProfit', 0) for r in result['rows'] if r['code'] == f['code']), 0)
-        row_yesterday = next((r.get('yesterdayProfit', 0) for r in result['rows'] if r['code'] == f['code']), 0)
-        print(f"  {f['code']} {name[:16]:16s}  shares={shares:>8.2f}  cost={cost:>7.4f}  "
-              f"gsz={gsz}  dwjz={dwjz}  todayProfit={row_today:>8.2f}  yesterdayProfit={row_yesterday:>8.2f}")
-    print('=== END DEBUG ===\n')
-
     return result
 
 
