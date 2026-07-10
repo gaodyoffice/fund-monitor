@@ -216,7 +216,8 @@ def compute_funds(funds, live, groups, cur_group='all'):
             cur_val = round(shares * gsz, 2)
             profit = round(cur_val - total_paid, 2)
             today_profit = round(shares * (gsz - dwjz), 2) if dwjz > 0 else 0.0
-            row['yesterdayProfit'] = f.get('yesterdayProfit', 0.0) or 0.0
+            prev = f.get('prevDwjz', 0.0) or 0.0
+            row['yesterdayProfit'] = round(shares * (dwjz - prev), 2) if prev > 0 else 0.0
             row['totalPaid'] = total_paid
             row['curVal'] = cur_val
             row['profit'] = profit
@@ -421,6 +422,7 @@ def api_refresh():
         s = f.get('shares', 0) or 0
         if s > 0 and nr['yesterday'] > 0:
             f['yesterdayProfit'] = round(s * (live[f['code']]['dwjz'] - nr['yesterday']), 2)
+            f['prevDwjz'] = nr['yesterday']
 
     # 二次校正：盘后用 eastmoney 今日净值替换 gsz（盘中跳过以节省时间）
     if datetime.now().hour >= 15:
