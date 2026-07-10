@@ -170,6 +170,7 @@ def compute_funds(funds, live, groups, cur_group='all'):
                 m['shares'] = (m.get('shares', 0) or 0) + (f.get('shares', 0) or 0)
                 m['cost'] = round((old_total + add_total) / m['shares'], 6) if m['shares'] > 0 else 0
                 m['todayBuy'] = (m.get('todayBuy', 0) or 0) + (f.get('todayBuy', 0) or 0)
+                m['yesterdayProfit'] = (m.get('yesterdayProfit', 0) or 0) + (f.get('yesterdayProfit', 0) or 0)
                 if f.get('addTime') and f['addTime'] < (m.get('addTime') or ''):
                     m['addTime'] = f['addTime']
             else:
