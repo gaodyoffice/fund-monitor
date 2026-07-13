@@ -798,14 +798,22 @@ function saveFund() {
       }
       if (finalTodayBuy > 0) {
         f.todayBuy = (f.todayBuy || 0) + finalTodayBuy;
-        if (f.shares === 0) {
-          const d = computedData ? computedData.fetched[f.code] : null;
-          const price = calcBuyPrice(d);
-          if (price > 0) { f.cost = price; f.shares = finalTodayBuy / price; }
-        }
       }
     }
     (async () => {
+      if (f && f.todayBuy > 0 && f.shares === 0) {
+        if (buyDate) {
+          const nav = await fetchNavByDate(editingFundCode, buyDate);
+          if (nav && nav > 0) {
+            f.cost = nav; f.shares = f.todayBuy / nav; f.todayBuy = 0;
+          }
+        }
+        if (f.shares === 0 && f.todayBuy > 0) {
+          const d = computedData ? computedData.fetched[f.code] : null;
+          const price = calcBuyPrice(d);
+          if (price > 0) { f.cost = price; f.shares = f.todayBuy / price; f.todayBuy = 0; }
+        }
+      }
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
       closeModal('fundModal');
