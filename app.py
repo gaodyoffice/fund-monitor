@@ -5,19 +5,12 @@ fund-server (Flask)
 ├── 计算层: compute_funds() 单函数输出所有衍生数据
 └── 路由: /api/config /api/save /api/compute /api/refresh
 """
-import json, os, threading, re, sys
+import json, os, threading, re
 from datetime import date, timedelta, datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from flask import Flask, render_template, request
-
-if sys.platform == 'win32':
-    try:
-        import ctypes
-        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
-    except Exception:
-        pass
 
 app = Flask(__name__)
 DATA_FILE = os.path.join(os.path.dirname(__file__), 'funds.json')
