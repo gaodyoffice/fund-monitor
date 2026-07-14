@@ -342,6 +342,8 @@ tr:hover td{background:var(--hover)}
     <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="addPosCalcInfo"></div>
     <label>加仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
     <input id="addPosPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
+    <label>加仓日期<span style="color:#484f58;font-weight:normal">（选填，按当日净值定价）</span></label>
+    <input id="addPosDate" type="date">
     <div class="btns">
       <button class="cancel" onclick="closeModal('addPosModal')">取消</button>
       <button class="ok" onclick="confirmAddPosition()">确认加仓</button>
@@ -488,6 +490,7 @@ async function addPosition(code) {
   document.getElementById('addPosInfo').textContent = `${posInfo} | 当前估值：${curPrice}`;
   document.getElementById('addPosAmount').value = '';
   document.getElementById('addPosPrice').value = '';
+  document.getElementById('addPosDate').value = '';
   document.getElementById('addPosCalcInfo').textContent = '';
   const calcInfo = document.getElementById('addPosCalcInfo');
   document.getElementById('addPosAmount').oninput = function() {
@@ -516,27 +519,38 @@ async function confirmAddPosition() {
   if (!f) return;
   const addAmount = parseFloat(document.getElementById('addPosAmount').value);
   if (isNaN(addAmount) || addAmount <= 0) { showToast('请输入加仓金额', true); return; }
+  const addPosDate = document.getElementById('addPosDate').value;
+  const manualPrice = parseFloat(document.getElementById('addPosPrice').value);
+  let addPrice = 0;
+  if (addPosDate) {
+    const nav = await fetchNavByDate(addPosCode, addPosDate);
+    if (nav && nav > 0) { addPrice = nav; }
+    else { showToast('无法获取该日期净值', true); return; }
+  }
+  if (addPrice <= 0 && !isNaN(manualPrice) && manualPrice > 0) addPrice = manualPrice;
   const now = new Date();
-  const isAfterMarket = now.getHours() >= 15;
-  if (isAfterMarket) {
-    let addPrice = parseFloat(document.getElementById('addPosPrice').value);
-    if (isNaN(addPrice) || addPrice <= 0) {
-      const d = await fetchOne(addPosCode);
-      if (!d) { showToast('暂无数据，请手动输入单价', true); return; }
-      addPrice = d.dwjz || d.gsz;
-      if (computedData) computedData.fetched[addPosCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
-    }
+  if (addPrice <= 0 && now.getHours() >= 15) {
+    const d = await fetchOne(addPosCode);
+    if (!d) { showToast('暂无数据，请手动输入单价', true); return; }
+    addPrice = d.dwjz || d.gsz;
+    if (computedData) computedData.fetched[addPosCode] = { gsz: d.gsz, dwjz: d.dwjz, name: d.name, gztime: d.gztime };
+  }
+  if (addPrice > 0) {
     const addShares = addAmount / addPrice;
     const oldTotal = (f.cost || 0) * (f.shares || 0);
     f.shares = (f.shares || 0) + addShares;
     f.cost = (oldTotal + addAmount) / f.shares;
+    await saveFunds(funds);
+    closeModal('addPosModal');
+    await computeAndRender();
+    showToast(`加仓 ¥${addAmount.toFixed(2)} 已完成`);
   } else {
     f.todayBuy = (f.todayBuy || 0) + addAmount;
+    await saveFunds(funds);
+    closeModal('addPosModal');
+    await computeAndRender();
+    showToast(`加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
   }
-  await saveFunds(funds);
-  closeModal('addPosModal');
-  await computeAndRender();
-  showToast(isAfterMarket ? `加仓 ¥${addAmount.toFixed(2)} 已按收盘价计算` : `加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
 }
 
 /* ============ TOAST / LOADING ============ */
