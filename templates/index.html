@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
-<title>基金实时看板</title>
+<title>基金实时看板 v1.7.6</title>
 <style>
 :root{--bg:#0d1117;--bg-card:#161b22;--text:#c9d1d9;--text2:#8b949e;--muted:#484f58;--border:#30363d;--border2:#21262d;--accent:#58a6ff;--accent-bg:rgba(88,166,255,.15);--accent-bg2:rgba(88,166,255,.25);--accent-bg3:rgba(88,166,255,.4);--accent-bg4:rgba(88,166,255,.06);--overlay:rgba(13,17,23,.85);--card-bg:rgba(255,255,255,.04);--card-border:rgba(255,255,255,.08);--elevated:rgba(255,255,255,.03);--ghost:rgba(255,255,255,.06);--hover:rgba(255,255,255,.02);--btn-primary:#238636;--btn-danger:#da3633;--btn-edit:#b37b00;--green:#3fb950;--red:#ff4d4f;--toast:rgba(35,134,54,.95);--toast-err:rgba(218,54,51,.95)}
 .theme-light{--bg:#fff;--bg-card:#f0f0f0;--text:#1a1a1a;--text2:#555;--muted:#888;--border:#d0d0d0;--border2:#e0e0e0;--accent:#1a73e8;--accent-bg:rgba(26,115,232,.1);--accent-bg2:rgba(26,115,232,.15);--accent-bg3:rgba(26,115,232,.25);--accent-bg4:rgba(26,115,232,.06);--overlay:rgba(255,255,255,.85);--card-bg:rgba(0,0,0,.03);--card-border:rgba(0,0,0,.08);--elevated:rgba(0,0,0,.02);--ghost:rgba(0,0,0,.05);--hover:rgba(0,0,0,.02);--btn-primary:#1a73e8;--btn-danger:#d93025;--btn-edit:#e37400;--toast:rgba(26,115,232,.9);--toast-err:rgba(217,48,37,.9)}
@@ -124,9 +124,9 @@ tr:hover td{background:var(--hover)}
 .empty{padding:24px;text-align:center;color:var(--muted);font-size:.82rem}
 
 /* Modal */
-.modal-overlay{position:fixed;inset:0;background:var(--overlay);z-index:100;display:none;align-items:center;justify-content:center;padding:16px}
+.modal-overlay{position:fixed;inset:0;background:var(--overlay);z-index:100;display:none;align-items:center;justify-content:center;padding:16px;overflow-y:auto}
 .modal-overlay.show{display:flex}
-.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:380px;max-height:80vh;overflow-y:auto}
+.modal{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;width:100%;max-width:380px}
 .modal h3{font-size:.95rem;color:var(--accent);margin-bottom:14px}
 .modal label{display:block;font-size:.78rem;color:var(--text2);margin-bottom:4px;margin-top:10px}
 .modal label:first-of-type{margin-top:0}
@@ -142,6 +142,9 @@ tr:hover td{background:var(--hover)}
 .modal .btns .cancel{background:var(--ghost);color:var(--text2)}
 .modal .btns .danger{background:var(--btn-danger);color:#fff}
 .modal .hint{font-size:.7rem;color:var(--muted);margin-top:4px}
+.tt{position:relative;cursor:help;color:var(--accent);font-size:.75rem;display:inline-block;vertical-align:middle;margin-left:3px;user-select:none}
+.tt::after{content:attr(data-tip);position:absolute;top:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--bg-card);color:var(--text);font-size:.73rem;padding:6px 10px;border-radius:6px;border:1px solid var(--border);opacity:0;pointer-events:none;transition:opacity .15s;z-index:1000;width:300px;white-space:normal;line-height:1.5;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.tt:hover::after{opacity:1}
 
 /* Toast */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--toast);color:#fff;padding:8px 18px;border-radius:8px;font-size:.8rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:999;white-space:nowrap}
@@ -158,7 +161,7 @@ tr:hover td{background:var(--hover)}
 <body>
 
 <div class="hd">
-  <h1>📈 基金实时看板</h1>
+  <h1>📈 基金实时看板 <span style="font-size:.6rem;color:var(--muted);font-weight:400">v1.7.6</span></h1>
   <div class="sub"><span id="updateTime">加载中…</span> <span class="cd" id="countdown">5:00 后自动刷新</span></div>
   <div class="ctrl">
     <span id="liveDot" class="live-dot"></span>
@@ -270,13 +273,13 @@ tr:hover td{background:var(--hover)}
     <select id="fundGroupSelect"></select>
     <label>基金代码</label>
     <input id="fundCode" placeholder="6位基金代码，如 008702" maxlength="6" oninput="this.value=this.value.replace(/\D/g,'')">
-    <label>今日买进金额（元）<span style="color:#484f58;font-weight:normal">（选填）</span></label>
+    <label>今日买进金额（元）<span style="color:#484f58;font-weight:normal">（选填）</span> <span class="tt" data-tip="盘前仅临时记录，刷新后自动按实时净值修正成交">ⓘ</span></label>
     <input id="fundTodayBuy" type="number" min="0" step="0.01" placeholder="今日买入金额">
-    <label>买进日期<span style="color:#484f58;font-weight:normal">（选填，按当日净值定单价）</span></label>
+    <label>买进日期 <span class="tt" data-tip="选填。按当日官方净值定价，盘中查不到则用实时估值">ⓘ</span><span style="color:#484f58;font-weight:normal">（选填，按当日净值定单价）</span></label>
     <input id="fundBuyDate" type="date">
-    <label>持仓成本（元）<span style="color:#484f58;font-weight:normal">（选填，覆盖日期净值）</span></label>
+    <label>持仓成本（元）<span style="color:#484f58;font-weight:normal">（选填，覆盖日期净值）</span> <span class="tt" data-tip="手动指定买入单价，优先级高于日期净值">ⓘ</span></label>
     <input id="fundCost" type="number" min="0" step="0.0001" placeholder="买入单价">
-    <label>持有份额 <span style="color:#484f58;font-weight:normal">（选填，覆盖自动计算）</span></label>
+    <label>持有份额 <span style="color:#484f58;font-weight:normal">（选填，覆盖自动计算）</span> <span class="tt" data-tip="手动指定份额，填写后覆盖 金额÷单价 的自动计算结果">ⓘ</span></label>
     <input id="fundShares" type="number" min="0" step="0.01" placeholder="持有份额">
     <div class="hint" id="fundNameHint">填买进日期则按当日官方净值定价；填持仓成本可覆盖。不填任何持仓信息则只观察。</div>
     <div class="btns">
@@ -308,10 +311,10 @@ tr:hover td{background:var(--hover)}
     <div id="buyFundInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
     <label>目标分组</label>
     <select id="buyGroupSelect"></select>
-    <label>买入金额（元）</label>
+    <label>买入金额（元） <span class="tt" data-tip="买入金额 ÷ 单价 = 所得份额">ⓘ</span></label>
     <input id="buyCost" type="number" min="0" step="0.01" placeholder="买入金额，如 500">
     <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="buyCalcInfo"></div>
-    <label>买入单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
+    <label>买入单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span> <span class="tt" data-tip="定价优先级：买进日期净值 > 手动输入 > 实时估值(≥15:00)">ⓘ</span></label>
     <input id="buyPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
     <div class="btns">
       <button class="cancel" onclick="closeModal('buyModal')">取消</button>
@@ -337,16 +340,35 @@ tr:hover td{background:var(--hover)}
   <div class="modal">
     <h3 id="addPosTitle">加仓</h3>
     <div id="addPosInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
-    <label>加仓金额（元）</label>
+    <label>加仓金额（元） <span class="tt" data-tip="加仓金额 ÷ 单价 = 新增份额，与原有持仓加权平均计算新成本">ⓘ</span></label>
     <input id="addPosAmount" type="number" min="0" step="0.01" placeholder="本次加仓金额，如 500">
     <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="addPosCalcInfo"></div>
-    <label>加仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span></label>
+    <label>加仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span> <span class="tt" data-tip="定价优先级：加仓日期净值 > 手动输入 > 实时估值(≥15:00)">ⓘ</span></label>
     <input id="addPosPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
-    <label>加仓日期<span style="color:#484f58;font-weight:normal">（选填，按当日净值定价）</span></label>
+    <label>加仓日期 <span class="tt" data-tip="选填。优先用当日净值定价；盘中查不到则降级为实时估值">ⓘ</span><span style="color:#484f58;font-weight:normal">（选填，按当日净值定价）</span></label>
     <input id="addPosDate" type="date">
     <div class="btns">
       <button class="cancel" onclick="closeModal('addPosModal')">取消</button>
       <button class="ok" onclick="confirmAddPosition()">确认加仓</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Reduce Position -->
+<div class="modal-overlay" id="reducePosModal">
+  <div class="modal">
+    <h3 id="reducePosTitle">减仓</h3>
+    <div id="reducePosInfo" style="font-size:.82rem;color:var(--text2);margin-bottom:10px"></div>
+    <label>减仓份额 <span class="tt" data-tip="不超过持有量。回收金额 ≈ 份额 × 单价，成本单价不变">ⓘ</span></label>
+    <input id="reducePosShares" type="number" min="0" step="0.01" placeholder="本次减仓份额">
+    <div style="font-size:.72rem;color:var(--muted);margin-top:-4px;margin-bottom:8px" id="reducePosCalcInfo"></div>
+    <label>减仓单价（元）<span style="color:#484f58;font-weight:normal">（默认当前实时估值）</span> <span class="tt" data-tip="定价优先级：减仓日期净值 > 手动输入 > 实时估值(≥15:00)">ⓘ</span></label>
+    <input id="reducePosPrice" type="number" min="0" step="0.0001" placeholder="留空则按当前实时估值">
+    <label>减仓日期 <span class="tt" data-tip="选填。优先用当日净值定价；盘中查不到则降级为实时估值">ⓘ</span><span style="color:#484f58;font-weight:normal">（选填，按当日净值定价）</span></label>
+    <input id="reducePosDate" type="date">
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('reducePosModal')">取消</button>
+      <button class="ok" onclick="confirmReducePosition()">确认减仓</button>
     </div>
   </div>
 </div>
@@ -525,7 +547,7 @@ async function confirmAddPosition() {
   if (addPosDate) {
     const nav = await fetchNavByDate(addPosCode, addPosDate);
     if (nav && nav > 0) { addPrice = nav; }
-    else { showToast('无法获取该日期净值', true); return; }
+    else { showToast('未找到该日期净值，按实时估值计算', true); }
   }
   if (addPrice <= 0 && !isNaN(manualPrice) && manualPrice > 0) addPrice = manualPrice;
   const now = new Date();
@@ -551,6 +573,58 @@ async function confirmAddPosition() {
     await computeAndRender();
     showToast(`加仓 ¥${addAmount.toFixed(2)} 盘中临时记录，刷新后修正`);
   }
+}
+
+/* ============ REDUCE POSITION ============ */
+let reducePosCode = null, reducePosGroupId = null;
+function reducePosition(code, gid) {
+  reducePosCode = code; reducePosGroupId = gid;
+  const f = funds.find(x => x.code === code && x.groupId === gid);
+  if (!f) return;
+  document.getElementById('reducePosTitle').textContent = '减仓 ' + (f.name || code);
+  document.getElementById('reducePosInfo').textContent = `持有 ${(f.shares||0).toFixed(2)} 份，成本 ¥${(f.cost||0).toFixed(4)}，总投入 ¥${((f.cost||0)*(f.shares||0)).toFixed(2)}`;
+  document.getElementById('reducePosShares').value = '';
+  document.getElementById('reducePosPrice').value = '';
+  document.getElementById('reducePosDate').value = '';
+  document.getElementById('reducePosCalcInfo').textContent = '';
+  const calcInfo = document.getElementById('reducePosCalcInfo');
+  document.getElementById('reducePosShares').oninput = function() {
+    const s = parseFloat(this.value);
+    if (s > 0) { calcInfo.textContent = `≈ 回收 ¥${(s * (f.cost||0)).toFixed(2)}（按成本）`; }
+    else { calcInfo.textContent = ''; }
+  };
+  showModal('reducePosModal');
+}
+
+async function confirmReducePosition() {
+  const f = funds.find(x => x.code === reducePosCode && x.groupId === reducePosGroupId);
+  if (!f) return;
+  const reduceShares = parseFloat(document.getElementById('reducePosShares').value);
+  if (isNaN(reduceShares) || reduceShares <= 0) { showToast('请输入减仓份额', true); return; }
+  const maxShares = f.shares || 0;
+  if (reduceShares > maxShares) { showToast('减仓份额超过持有量', true); return; }
+  const reduceDate = document.getElementById('reducePosDate').value;
+  const manualPrice = parseFloat(document.getElementById('reducePosPrice').value);
+  let price = 0;
+  if (reduceDate) {
+    const nav = await fetchNavByDate(reducePosCode, reduceDate);
+    if (nav && nav > 0) { price = nav; }
+    else { showToast('未找到该日期净值，按实时估值计算', true); }
+  }
+  if (price <= 0 && !isNaN(manualPrice) && manualPrice > 0) price = manualPrice;
+  const now = new Date();
+  if (price <= 0 && now.getHours() >= 15) {
+    const d = await fetchOne(reducePosCode);
+    if (d) price = d.dwjz || d.gsz;
+  }
+  if (price <= 0) price = 0;
+  f.shares = maxShares - reduceShares;
+  await saveFunds(funds);
+  closeModal('reducePosModal');
+  await refreshOne(reducePosCode);
+  await computeAndRender();
+  const recovered = (reduceShares * (price > 0 ? price : f.cost || 0)).toFixed(2);
+  showToast(`减仓 ${reduceShares} 份，回收约 ¥${recovered}`);
 }
 
 /* ============ TOAST / LOADING ============ */
@@ -1186,7 +1260,7 @@ function render() {
       <td data-col="14" class="r num bold" style="color:${r.hasPos ? rc : 'var(--muted)'}">${r.hasPos ? fmtY(r.curVal) : '—'}</td>
       <td data-col="15"><div class="fund-actions">
         ${curGroup === 'all' ? '<span style="color:var(--muted);font-size:.7rem">合并</span>' :
-          (r.hasPos ? `<button onclick="addPosition('${r.code}')" title="加仓">➕</button>` : `<button onclick="buyFund('${r.code}')" title="买进">💰</button>`) +
+          (r.hasPos ? `<button onclick="addPosition('${r.code}')" title="加仓">➕</button><button onclick="reducePosition('${r.code}','${r.groupId}')" title="减仓">➖</button>` : `<button onclick="buyFund('${r.code}')" title="买进">💰</button>`) +
           `<button onclick="showEditFund('${r.code}','${r.groupId}')" title="编辑">✎</button>` +
           `<button class="del-btn" onclick="deleteFund('${r.code}','${r.groupId}')" title="删除">×</button>`
         }
