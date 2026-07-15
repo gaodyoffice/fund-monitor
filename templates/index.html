@@ -373,6 +373,17 @@ tr:hover td{background:var(--hover)}
   </div>
 </div>
 
+<!-- Modal: Position Log -->
+<div class="modal-overlay" id="posLogModal">
+  <div class="modal">
+    <h3 id="posLogTitle">持仓记录</h3>
+    <div id="posLogBody" style="font-size:.78rem;color:var(--text2);max-height:50vh;overflow-y:auto"></div>
+    <div class="btns">
+      <button class="cancel" onclick="closeModal('posLogModal')" style="flex:1">关闭</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ============ DATA LAYER ============ */
 const LS_GROUPS = 'fm_groups';
@@ -485,6 +496,8 @@ async function confirmBuy() {
   } else {
     f.todayBuy = (f.todayBuy || 0) + cost;
   }
+  if (!f.positionLog) f.positionLog = [];
+  f.positionLog.push({ type: 'buy', date: todayStr, amount: cost, price: isAfterMarket ? (f.cost || 0) : 0, shares: isAfterMarket ? f.shares : 0, totalPaid: (f.cost || 0) * (f.shares || 0), method: isAfterMarket ? 'direct' : 'todayBuy' });
   if (!f.addTime) f.addTime = todayStr;
   await saveFunds(funds);
   closeModal('buyModal');
@@ -562,12 +575,16 @@ async function confirmAddPosition() {
     const oldTotal = (f.cost || 0) * (f.shares || 0);
     f.shares = (f.shares || 0) + addShares;
     f.cost = (oldTotal + addAmount) / f.shares;
+    if (!f.positionLog) f.positionLog = [];
+    f.positionLog.push({ type: 'add', date: new Date().toISOString().split('T')[0], amount: addAmount, price: addPrice, shares: addShares, totalPaid: f.cost * f.shares, method: 'direct' });
     await saveFunds(funds);
     closeModal('addPosModal');
     await computeAndRender();
     showToast(`加仓 ¥${addAmount.toFixed(2)} 已完成`);
   } else {
     f.todayBuy = (f.todayBuy || 0) + addAmount;
+    if (!f.positionLog) f.positionLog = [];
+    f.positionLog.push({ type: 'add', date: new Date().toISOString().split('T')[0], amount: addAmount, price: 0, shares: 0, totalPaid: (f.cost || 0) * (f.shares || 0), method: 'todayBuy' });
     await saveFunds(funds);
     closeModal('addPosModal');
     await computeAndRender();
@@ -619,6 +636,8 @@ async function confirmReducePosition() {
   }
   if (price <= 0) price = 0;
   f.shares = maxShares - reduceShares;
+  if (!f.positionLog) f.positionLog = [];
+  f.positionLog.push({ type: 'reduce', date: reduceDate || new Date().toISOString().split('T')[0], amount: reduceShares * price, price: price, shares: reduceShares, totalPaid: (f.cost || 0) * f.shares, method: 'direct' });
   await saveFunds(funds);
   closeModal('reducePosModal');
   await refreshOne(reducePosCode);
@@ -818,6 +837,27 @@ function showAddFund(groupId) {
   showModal('fundModal');
 }
 
+function showPositionLog(code, gid) {
+  const f = gid ? funds.find(x => x.code === code && x.groupId === gid) : funds.find(x => x.code === code);
+  if (!f) return;
+  const logs = f.positionLog || [];
+  document.getElementById('posLogTitle').textContent = '持仓记录 - ' + (f.name || code);
+  if (logs.length === 0) {
+    document.getElementById('posLogBody').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">暂无记录</div>';
+  } else {
+    let html = '<table style="width:100%;border-collapse:collapse;font-size:.75rem"><tr style="color:var(--muted)"><th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">日期</th><th style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border)">类型</th><th style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border)">金额</th><th style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border)">单价</th><th style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border)">份额</th><th style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border)">累计投入</th></tr>';
+    logs.forEach(l => {
+      const typeLabel = l.type === 'buy' ? '买入' : l.type === 'reduce' ? '减仓' : '加仓';
+      const priceStr = l.price > 0 ? l.price.toFixed(4) : '—';
+      const sharesStr = l.shares > 0 ? l.shares.toFixed(2) : '—';
+      html += `<tr><td style="padding:4px 6px;border-bottom:1px solid var(--border2)">${l.date}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2)">${typeLabel}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2)">¥${l.amount.toFixed(2)}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2)">${priceStr}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2)">${sharesStr}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2)">¥${l.totalPaid.toFixed(2)}</td></tr>`;
+    });
+    html += '</table>';
+    document.getElementById('posLogBody').innerHTML = html;
+  }
+  showModal('posLogModal');
+}
+
 function showEditFund(code, gid) {
   const f = gid ? funds.find(x => x.code === code && x.groupId === gid) : funds.find(x => x.code === code);
   if (!f) return;
@@ -948,7 +988,7 @@ function saveFund() {
         if (price > 0) { autoCost = price; autoShares = finalTodayBuy / price; }
       }
 
-      const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: finalTodayBuy, groupId, buyDate: buyDate || undefined, addTime: new Date().toISOString().split('T')[0], records: [] };
+      const newFund = { code, name, cost: autoCost, shares: autoShares > 0 ? autoShares : 0, todayBuy: autoShares > 0 ? 0 : finalTodayBuy, groupId, buyDate: buyDate || undefined, addTime: new Date().toISOString().split('T')[0], records: [], positionLog: [] };
       funds.push(newFund);
       if (!computedData) {
         computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
@@ -959,6 +999,9 @@ function saveFund() {
       if (d.dwjz > 0) {
         const v = (d.gsz - d.dwjz) / d.dwjz * 100;
         newFund.records = [{ d: today, v: parseFloat(v.toFixed(4)) }];
+      }
+      if (newFund.cost > 0 && newFund.shares > 0) {
+        newFund.positionLog.push({ type: 'buy', date: buyDate || today, amount: newFund.cost * newFund.shares, price: newFund.cost, shares: newFund.shares, totalPaid: newFund.cost * newFund.shares, method: 'direct' });
       }
       await saveFunds(funds);
       lastGroupId = groupId; localStorage.setItem('fm_last_group', groupId);
@@ -1262,6 +1305,7 @@ function render() {
         ${curGroup === 'all' ? '<span style="color:var(--muted);font-size:.7rem">合并</span>' :
           (r.hasPos ? `<button onclick="addPosition('${r.code}')" title="加仓">➕</button><button onclick="reducePosition('${r.code}','${r.groupId}')" title="减仓">➖</button>` : `<button onclick="buyFund('${r.code}')" title="买进">💰</button>`) +
           `<button onclick="showEditFund('${r.code}','${r.groupId}')" title="编辑">✎</button>` +
+          `<button onclick="showPositionLog('${r.code}','${r.groupId}')" title="持仓记录">📋</button>` +
           `<button class="del-btn" onclick="deleteFund('${r.code}','${r.groupId}')" title="删除">×</button>`
         }
       </div></td>
