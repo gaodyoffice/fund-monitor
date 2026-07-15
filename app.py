@@ -69,10 +69,10 @@ def fetch_one(code):
 
 
 def fetch_official_nav(code):
-    """取最近两期官方净值，返回 {today, date, yesterday} 或 None"""
+    """取最近三期官方净值，返回 {today, date, yesterday, prevPrev} 或 None"""
     try:
         r = requests.get(
-            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=2',
+            f'https://api.fund.eastmoney.com/f10/lsjz?callback=jquery&fundCode={code}&pageIndex=1&pageSize=3',
             headers={'Referer': 'https://fund.eastmoney.com/'},
             timeout=FETCH_TIMEOUT,
         )
@@ -85,9 +85,11 @@ def fetch_official_nav(code):
             records = data['Data']['LSJZList']
             if records:
                 r0 = records[0]
-                result = {'today': float(r0['DWJZ']), 'date': r0.get('FSRQ', ''), 'yesterday': None}
+                result = {'today': float(r0['DWJZ']), 'date': r0.get('FSRQ', ''), 'yesterday': None, 'prevPrev': None}
                 if len(records) > 1:
                     result['yesterday'] = float(records[1]['DWJZ'])
+                if len(records) > 2:
+                    result['prevPrev'] = float(records[2]['DWJZ'])
                 return result
     except Exception:
         pass
@@ -407,23 +409,35 @@ def api_refresh():
             except Exception:
                 pass
 
-    # 昨日盈亏 = 份额 × (最新净值 - 昨日净值)
+    # 昨日盈亏 = 份额 × (昨日净值 - 前日净值)
     for f in funds:
         nr = nav_results.get(f['code'])
         if not nr or not nr.get('yesterday'):
             continue
         s = f.get('shares', 0) or 0
         if s > 0 and nr['yesterday'] > 0:
-            f['yesterdayProfit'] = round(s * (live[f['code']]['dwjz'] - nr['yesterday']), 2)
-            f['prevDwjz'] = nr['yesterday']
+            if nr['date'] == today:
+                f['prevDwjz'] = nr.get('prevPrev', 0)
+            else:
+                f['prevDwjz'] = nr.get('yesterday', 0)
 
-    # 二次校正：盘后用 eastmoney 今日净值替换 gsz（盘中跳过以节省时间）
+    # dwjz 始终用 eastmoney 最新官方净值校正（不限时间）
+    for code, nr in nav_results.items():
+        if not live.get(code):
+            continue
+        if nr['date'] == today:
+            if nr.get('yesterday'):
+                live[code]['dwjz'] = nr['yesterday']
+        elif nr.get('today') and nr['today'] > 0:
+            live[code]['dwjz'] = nr['today']
+
+    # gsz 盘后校正（仅当日数据可替换）
     if datetime.now().hour >= 15:
         for code, nr in nav_results.items():
-            if nr['date'] == today and live.get(code):
+            if not live.get(code):
+                continue
+            if nr['date'] == today:
                 live[code]['gsz'] = nr['today']
-                if nr['yesterday']:
-                    live[code]['dwjz'] = nr['yesterday']
 
     # 修正 todayBuy: 用最新 gsz 合并到现有持仓
     changed = False
