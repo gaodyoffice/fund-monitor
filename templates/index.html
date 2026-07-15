@@ -1518,10 +1518,11 @@ async function importConfig(e) {
   switchTheme(savedTheme);
   document.getElementById('groupProfitMode').value = getGroupProfitMode();
   // load config from server API
+  let cfg = null;
   try {
     const res = await fetch('/api/config');
     if (res.ok) {
-      const cfg = await res.json();
+      cfg = await res.json();
       if (cfg.refreshInterval && cfg.refreshInterval >= 60) {
         refreshInterval = cfg.refreshInterval;
         localStorage.setItem('fm_refresh_interval', refreshInterval);
@@ -1545,16 +1546,23 @@ async function importConfig(e) {
     groups.push({ id: 'watchlist', name: '自选', color: '#9e9e9e', watchlist: true });
     saveGroups(groups);
   }
-  // Initial computed data from local funds (no live data)
-  computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
-  _sortBackup = [];
+  // 有缓存数据则秒渲染，无缓存则先计算后刷新
+  const hasCache = cfg && cfg._computed && cfg._computed.rows && cfg._computed.rows.length > 0;
+  if (hasCache) {
+    computedData = cfg._computed;
+    computedData.fetched = {};
+    _sortBackup = cfg._computed.rows.slice();
+  } else {
+    computedData = { rows: [], summary: {totalCost:0,totalValue:0,totalProfit:0,totalToday:0,totalPct:0}, groupsProfit: {}, groupBreakdown: [], fetched: {} };
+    _sortBackup = [];
+  }
   render();
   initColumnResize();
   initColVisibility();
   initSort();
-  await computeAndRender();
+  if (!hasCache) await computeAndRender();
   if (funds.length > 0) {
-    fetchAllFunds();
+    fetchAllFunds(); // 后台异步刷新，不阻塞渲染
   }
   resetCountdown();
   if (funds.length === 0) {

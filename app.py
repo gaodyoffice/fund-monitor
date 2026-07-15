@@ -489,6 +489,16 @@ def api_refresh():
     result['funds'] = funds
     result['fetched'] = fetched
     result['groups'] = groups
+
+    # 缓存计算结果，实现前端秒开
+    config['_computed'] = {
+        'rows': result.get('rows', []),
+        'summary': result.get('summary', {}),
+        'groupsProfit': result.get('groupsProfit', {}),
+        'groupBreakdown': result.get('groupBreakdown', []),
+    }
+    write_config(config)
+
     return result
 
 
